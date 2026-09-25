@@ -291,7 +291,7 @@ export function ProfileExperienceSection({
             if (editingIndex === index) {
               return <li key={index} className="py-2">{renderForm()}</li>;
             }
-            const duration = item.dateRange ? formatDuration(item.dateRange) : "";
+            const duration = item.dateRange ? formatDuration(item.isCurrent ? `${item.dateRange.split(/\s*(?:-|–|—|\bto\b)\s*/i)[0]} - Present` : item.dateRange) : "";
             const highlights = item.highlights ?? [];
             const isExpanded = expanded.has(index);
             const visible = isExpanded ? highlights : highlights.slice(0, VISIBLE_HIGHLIGHTS);
@@ -337,7 +337,7 @@ export function ProfileExperienceSection({
                       )}
                     </div>
 
-                    <div className="flex shrink-0 items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
+                    <div className="flex shrink-0 items-center gap-0.5 opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100">
                       <Button
                         variant="ghost"
                         size="icon"

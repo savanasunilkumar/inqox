@@ -100,9 +100,9 @@ export function ProfileSummaryHeader({
       {/* Detection status summary */}
       <div className="flex flex-wrap items-center gap-2.5 pt-1 pb-3">
         {hasExperience ? (
-          <Badge variant="outline" className="h-6 gap-1.5 border-emerald-500/25 bg-emerald-500/10 px-2.5 text-xs font-normal text-emerald-800 dark:text-emerald-300">
+          <Badge variant="outline" className="h-6 max-w-full gap-1.5 border-emerald-500/25 bg-emerald-500/10 px-2.5 text-xs font-normal text-emerald-800 dark:text-emerald-300">
             <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span>
+            <span className="min-w-0 truncate">
               Experience detected
               {experienceCount > 0 ? ` (${experienceCount} ${experienceCount === 1 ? "role" : "roles"})` : ""}
               {experienceHighlight ? ` · ${experienceHighlight}` : ""}
@@ -116,9 +116,9 @@ export function ProfileSummaryHeader({
         )}
 
         {hasEducation ? (
-          <Badge variant="outline" className="h-6 gap-1.5 border-emerald-500/25 bg-emerald-500/10 px-2.5 text-xs font-normal text-emerald-800 dark:text-emerald-300">
+          <Badge variant="outline" className="h-6 max-w-full gap-1.5 border-emerald-500/25 bg-emerald-500/10 px-2.5 text-xs font-normal text-emerald-800 dark:text-emerald-300">
             <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span>
+            <span className="min-w-0 truncate">
               Education detected
               {educationCount > 0 ? ` (${educationCount} ${educationCount === 1 ? "credential" : "credentials"})` : ""}
               {educationHighlight ? ` · ${educationHighlight}` : ""}
