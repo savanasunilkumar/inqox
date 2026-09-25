@@ -60,8 +60,13 @@ export async function POST(request: Request) {
     });
     console.log(`[Experience Detected]: ${extraction.hasExperience ? "YES" : "NO"} (${extraction.experience.length} roles)`);
     extraction.experience.forEach((exp, idx) => {
-      console.log(`  [Company ${idx + 1}]: "${exp.company}" | Role: "${exp.title}" | Dates: "${exp.dateRange}"`);
+      console.log(`  [Company ${idx + 1}]: "${exp.company}" | Role: "${exp.title}" | Dates: "${exp.dateRange}" | Location: "${exp.location ?? ""}"`);
+      exp.highlights.forEach(h => console.log(`      - ${h}`));
     });
+    if (process.env.NODE_ENV !== "production") {
+      console.log("----------------- Extracted Text Lines -----------------");
+      text.split("\n").forEach((l, idx) => console.log(`  ${String(idx + 1).padStart(3)} | ${l}`));
+    }
     console.log("----------------- Granular Parser Logs -----------------");
     extraction.logs.forEach(l => {
       console.log(`  • [${l.category.toUpperCase()}] ${l.message}`);

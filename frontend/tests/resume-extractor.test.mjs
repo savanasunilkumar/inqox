@@ -314,3 +314,38 @@ Software Engineer (Intern to L2) Apr 2022 - Aug 2024
     ["Software Engineer (Intern to L2)", "Anora Instrumentation Pvt. Ltd.", "Tamil Nadu, India", ["Developed firmware tools"]],
   ]);
 });
+
+test("keeps a suffixed employer line below the title out of bullets and joins wrapped bullets", () => {
+  const result = extractFromResumeText(`
+Experience
+Software Development Intern May 2025 - Dec 2025
+Thinix Ames, Iowa
+- Automated CI/CD pipelines in Azure DevOps, cutting deployment cycles from days to hours.
+Software Engineer (Intern to L2) Apr 2022 - Aug 2024
+Anora Instrumentation Pvt. Ltd. Tamil Nadu, India
+- Led full-stack development of a semiconductor handling system - UI, backend services, and device integrations - used by
+200+ daily operators, improving workflow efficiency by 30%.
+- Designed reusable React/TypeScript architecture adopted by 3 engineering teams.
+`);
+  const anora = result.experience[1];
+  assert.equal(anora.company, "Anora Instrumentation Pvt. Ltd.");
+  assert.equal(anora.location, "Tamil Nadu, India");
+  assert.deepEqual(anora.highlights, [
+    "Led full-stack development of a semiconductor handling system - UI, backend services, and device integrations - used by 200+ daily operators, improving workflow efficiency by 30%.",
+    "Designed reusable React/TypeScript architecture adopted by 3 engineering teams.",
+  ]);
+  assert.deepEqual(result.experience[0].highlights, ["Automated CI/CD pipelines in Azure DevOps, cutting deployment cycles from days to hours."]);
+});
+
+test("stops experience at qualified section headers like AI Projects", () => {
+  const result = extractFromResumeText(`
+Experience
+Software Engineer Apr 2022 - Aug 2024
+Anora Instrumentation Pvt. Ltd. Tamil Nadu, India
+- Designed reusable React architecture.
+AI Projects
+Cipilot - AI Campus Assistant Vertex AI, React Native
+- Built the React Native application.
+`);
+  assert.deepEqual(result.experience[0].highlights, ["Designed reusable React architecture."]);
+});

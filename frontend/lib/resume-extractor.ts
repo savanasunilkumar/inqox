@@ -306,7 +306,8 @@ function identifySections(lines: string[], logs: ExtractionLogEntry[]): { educat
 
   const isOtherHeader = (line: string) => {
     const clean = line.replace(/^[#*\-–—|•·\s]+|[#*\-–—|•·:\s]+$/g, "").trim().toLowerCase();
-    return /^(?:skills|technical\s+skills|projects|certifications|awards|publications|languages|summary|objective|volunteer|patents|interests)$/i.test(clean);
+    // Allows qualifiers such as "AI Projects", "Academic Projects" or "Publications & Recognition".
+    return /^(?:[a-z/-]+\s+){0,2}(?:skills|projects|certifications|awards|publications|languages|summary|objective|volunteer(?:ing)?|patents|interests|achievements|honors|leadership|activities)(?:\s*(?:&|and|\/)\s*[a-z\s]+)?$/i.test(clean);
   };
 
   for (const line of lines) {
@@ -676,6 +677,8 @@ function extractExperience(
   let lastCompany = "";
   let lastCompanyWasHeading = false;
   const consumedIndices = new Set<number>();
+  const rawBullets = new WeakSet<ExtractedExperience>();
+  let lastLineWasHighlight = false;
   let currentCompanyWasHeading = false;
 
   for (let i = 0; i < linesToScan.length; i++) {
@@ -762,9 +765,10 @@ function extractExperience(
 
       if (!company) {
         // Look for any line with company indicators nearby
-        for (const candidate of [prevLine1, prevLine2, nextLine1]) {
+        for (const [candidate, idx] of [[prevLine1, i - 1], [prevLine2, i - 2], [nextLine1, i + 1]] as const) {
           if (candidate && COMPANY_SUFFIX_REGEX.test(candidate) && !JOB_TITLE_KEYWORDS.some(k => candidate.toLowerCase().includes(k))) {
             company = cleanCompanyName(candidate);
+            if (idx === i + 1) consumedIndices.add(idx);
             break;
           }
         }
@@ -839,7 +843,16 @@ function extractExperience(
     }
 
     if (currentItem) {
-      const isBullet = /^[-•*·–—]\s*/.test(line) || (line.length > 25 && !dateRangeRegex.test(line));
+      const hasMarker = /^[-•*·–—]\s*/.test(line);
+      const previous = currentItem.highlights[currentItem.highlights.length - 1];
+      // PDF text wraps long bullets; an unmarked line continuing a sentence belongs to the bullet above.
+      if (!hasMarker && previous && rawBullets.has(currentItem) && lastLineWasHighlight && (/^[a-z0-9(]/.test(line) || !/[.!?]$/.test(previous))) {
+        currentItem.highlights[currentItem.highlights.length - 1] = `${previous} ${line}`;
+        continue;
+      }
+      const isBullet = hasMarker || (line.length > 25 && !dateRangeRegex.test(line));
+      if (hasMarker) rawBullets.add(currentItem);
+      lastLineWasHighlight = isBullet && currentItem.highlights.length < 6;
       if (isBullet && currentItem.highlights.length < 6) {
         currentItem.highlights.push(line.replace(/^[-•*·–—]\s*/, "").trim());
       }
