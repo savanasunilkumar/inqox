@@ -1,18 +1,35 @@
 from __future__ import annotations
 
+import asyncio
 import secrets
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Path, Query, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Path, Query, Request
 from pydantic import BaseModel, Field
 
 from .config import Settings
 from .db import Database
-from .job_signals import acceptable_seniority, country_code, extract_skills, role_families
+from .job_signals import (
+    acceptable_seniority,
+    country_code,
+    extract_skills,
+    role_families,
+    title_pattern,
+    title_phrases,
+)
 from .repository import Repository
 
 settings = Settings.from_env()
+# Jobs written by an older scanner have no match signals; derive them in the background.
+_signal_backfill = asyncio.Lock()
+
+
+async def backfill_signals(repo: Repository) -> None:
+    if _signal_backfill.locked():
+        return
+    async with _signal_backfill:
+        await repo.refresh_signals(only_missing=True)
 
 
 @asynccontextmanager
@@ -93,7 +110,9 @@ class CandidateProfile(BaseModel):
 
 
 @app.post("/jobs/matches", dependencies=[Depends(require_token)])
-async def match_jobs(repo: RepositoryDependency, profile: CandidateProfile) -> dict[str, object]:
+async def match_jobs(
+    repo: RepositoryDependency, profile: CandidateProfile, background: BackgroundTasks
+) -> dict[str, object]:
     titles = [title for title in profile.titles if title.strip()]
     skills = sorted(
         set(extract_skills(profile.text)) | set(extract_skills(", ".join(profile.skills)))
@@ -101,6 +120,8 @@ async def match_jobs(repo: RepositoryDependency, profile: CandidateProfile) -> d
     families = sorted({family for title in titles for family in role_families(title)})
     levels = acceptable_seniority(profile.years_experience, titles)
     country = country_code(profile.work_country)
+    phrases = title_phrases(titles)
+    background.add_task(backfill_signals, repo)
     page = await repo.match_jobs(
         skills=skills,
         families=families,
@@ -109,12 +130,19 @@ async def match_jobs(repo: RepositoryDependency, profile: CandidateProfile) -> d
         country=country,
         needs_sponsorship=profile.needs_sponsorship,
         remote_only=profile.remote_only,
+        title_patterns=[title_pattern(phrase) for phrase in phrases],
         limit=profile.limit,
         offset=profile.offset,
     )
     return {
         **page,
-        "profile": {"skills": skills, "roles": families, "levels": levels, "country": country},
+        "profile": {
+            "skills": skills,
+            "titles": phrases,
+            "roles": families,
+            "levels": levels,
+            "country": country,
+        },
     }
 
 

@@ -639,6 +639,45 @@ def acceptable_seniority(years: float | None, titles: Iterable[str]) -> list[int
     return sorted(bands)
 
 
+SIGNALS_VERSION = 1
+
+_TITLE_LEVEL_WORDS = re.compile(
+    r"\b(?:senior|sr|junior|jr|intern(?:ship)?|co-?op|trainee|staff|principal|lead|graduate|"
+    r"new grad|entry[- ]level|entry|associate|mid[- ]level|i{1,3}|iv|l\d|e\d|to)\b"
+)
+_TITLE_ROLE_NOUNS = {"engineer", "engineering", "developer", "development"}
+_GENERIC_TITLES = {
+    "engineer",
+    "developer",
+    "intern",
+    "analyst",
+    "manager",
+    "associate",
+    "assistant",
+}
+
+
+def title_phrases(titles: Iterable[str]) -> list[str]:
+    """Core job titles a candidate has held, without level words or team suffixes."""
+    phrases: set[str] = set()
+    for title in titles:
+        core = _normalize(re.sub(r"\([^)]*\)|\[[^\]]*\]", " ", title))
+        core = re.split(r",|\s[-–—|@:]\s", core)[0]
+        core = _TITLE_LEVEL_WORDS.sub(" ", core.replace(".", " "))
+        words = re.sub(r"[^\w+#/& ]", " ", core).split()
+        if not words or (len(words) == 1 and words[0] in _GENERIC_TITLES):
+            continue
+        phrases.add(" ".join(words))
+        if len(words) > 1 and words[-1] in _TITLE_ROLE_NOUNS:
+            phrases.update(" ".join([*words[:-1], noun]) for noun in ("engineer", "developer"))
+    return sorted(phrases)[:100]
+
+
+def title_pattern(phrase: str) -> str:
+    """PostgreSQL ARE matching a phrase as whole words, tolerant of spaces vs hyphens."""
+    return r"\m" + r"[\s-]+".join(re.escape(word) for word in phrase.split()) + r"\M"
+
+
 def parse_years(value: str | None) -> float | None:
     if not value:
         return None
