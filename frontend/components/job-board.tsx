@@ -4,22 +4,53 @@ import { useAgentFetch } from "@/lib/use-agent-fetch";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BriefcaseBusiness, LoaderCircle, MapPin } from "lucide-react";
+import Link from "next/link";
 import { CompanyLogo } from "@/components/company-logo";
 import { JobDetails } from "@/components/job-details";
 import { useJobFeed } from "@/components/job-feed-provider";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
-import { employmentLabel, parseJobsPage, relativeDate, type Job } from "@/lib/job-model";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { employmentLabel, parseJobsPage, relativeDate, type Job, type JobMatch } from "@/lib/job-model";
 import Loading from "@/app/job-board/loading";
 
 export function JobBoard() {
   const params = useSearchParams();
   const rawCursor = params.get("before") ?? "";
-  const before = /^[1-9]\d*$/.test(rawCursor) && Number.isSafeInteger(Number(rawCursor)) ? Number(rawCursor) : null;
-  return <JobFeed key={before ?? "latest"} before={before} />;
+  const view: View = params.get("view") === "all" ? "all" : "matched";
+  const cursor = /^[1-9]\d*$/.test(rawCursor) && Number.isSafeInteger(Number(rawCursor)) ? Number(rawCursor) : null;
+  const before = view === "all" ? cursor : null;
+  return <JobFeed key={`${view}:${before ?? "latest"}`} view={view} before={before} />;
 }
 
-function JobFeed({ before }: { before: number | null }) {
+type View = "matched" | "all";
+
+function matchReason(match: JobMatch): string {
+  const parts: string[] = [];
+  if (match.skills.length) parts.push(match.skills.slice(0, 3).join(", ") + (match.skills.length > 3 ? ` +${match.skills.length - 3}` : ""));
+  else if (match.roleMatch) parts.push("Matches your role");
+  if (match.level) parts.push(match.level);
+  return parts.join(" · ");
+}
+
+function ViewToggle({ view }: { view: View }) {
+  const router = useRouter();
+  return (
+    <ToggleGroup
+      type="single"
+      size="sm"
+      variant="outline"
+      value={view}
+      onValueChange={(value) => { if (value) router.replace(value === "all" ? "/job-board?view=all" : "/job-board", { scroll: false }); }}
+      aria-label="Jobs to show"
+    >
+      <ToggleGroupItem value="matched" className="px-3 text-xs">For you</ToggleGroupItem>
+      <ToggleGroupItem value="all" className="px-3 text-xs">All jobs</ToggleGroupItem>
+    </ToggleGroup>
+  );
+}
+
+function JobFeed({ view, before }: { view: View; before: number | null }) {
   const agentFetch = useAgentFetch();
   const router = useRouter();
   const { feeds, savePage } = useJobFeed();
@@ -45,7 +76,7 @@ function JobFeed({ before }: { before: number | null }) {
       setApplying(null);
     }
   }
-  const feedKey = String(before ?? "latest");
+  const feedKey = `${view}:${before ?? "latest"}`;
   const cached = feeds[feedKey];
   const jobs = cached?.items ?? [];
   const hasMore = cached?.hasMore ?? true;
@@ -62,12 +93,17 @@ function JobFeed({ before }: { before: number | null }) {
     const controller = new AbortController();
     request.current = controller;
     const nextCursor = refresh ? before : cursor;
-    const query = nextCursor === null ? "" : `?before=${nextCursor}`;
+    const search = new URLSearchParams();
+    if (view === "matched") search.set("view", "matched");
+    if (nextCursor !== null) search.set("before", String(nextCursor));
+    const query = search.size ? `?${search}` : "";
     try {
       const response = await agentFetch(`/api/jobs${query}`, { signal: controller.signal, cache: "no-store" });
       if (!response.ok) throw new Error("Jobs unavailable");
       const page = parseJobsPage(await response.json());
-      if (!page || (page.hasMore && nextCursor !== null && page.nextCursor! >= nextCursor)) throw new Error("Invalid job page");
+      // "All" pages walk ids downward; "For you" pages walk a rank offset upward.
+      const stalled = page?.hasMore && nextCursor !== null && (view === "all" ? page.nextCursor! >= nextCursor : page.nextCursor! <= nextCursor);
+      if (!page || stalled) throw new Error("Invalid job page");
       if (controller.signal.aborted) return;
       savePage(feedKey, page, refresh);
       setStatus("idle");
@@ -76,7 +112,7 @@ function JobFeed({ before }: { before: number | null }) {
     } finally {
       if (request.current === controller) request.current = null;
     }
-  }, [before, cursor, feedKey, hasMore, savePage, agentFetch]);
+  }, [before, cursor, feedKey, hasMore, savePage, agentFetch, view]);
 
   const startLoad = useCallback((refresh = false) => {
     if (request.current || (!refresh && !hasMore)) return;
@@ -107,11 +143,21 @@ function JobFeed({ before }: { before: number | null }) {
   return (
     <Sheet open={panelOpen} onOpenChange={setPanelOpen}>
       <div className="w-full min-w-0 px-4 py-5 sm:px-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-[13px] text-muted-foreground">
+            {view === "matched" ? "Roles that fit your experience, skills and work authorization" : "Every open role"}
+          </p>
+          <ViewToggle view={view} />
+        </div>
         {jobs.length === 0 ? (
           <div className="flex min-h-64 flex-col items-center justify-center gap-4 rounded-xl border border-dashed px-6 text-center" role="status">
             <BriefcaseBusiness className="size-6 text-muted-foreground" aria-hidden="true" />
-            <h2 className="font-medium">{status === "error" ? "We couldn’t load the jobs" : "No open roles right now"}</h2>
-            <p className="text-sm text-muted-foreground">{status === "error" ? "Please try again in a moment." : "Check back soon for new opportunities."}</p>
+            <h2 className="font-medium">{status === "error" ? "We couldn’t load the jobs" : view === "matched" ? "No matching roles yet" : "No open roles right now"}</h2>
+            <p className="text-sm text-muted-foreground">
+              {status === "error" ? "Please try again in a moment." : view === "matched"
+                ? <>Add more experience to your <Link href="/profile" className="underline underline-offset-4">profile</Link>, or browse all jobs.</>
+                : "Check back soon for new opportunities."}
+            </p>
             {status === "error" && <Button variant="outline" onClick={() => startLoad()}>Try again</Button>}
           </div>
         ) : (
@@ -133,6 +179,7 @@ function JobFeed({ before }: { before: number | null }) {
                       <span className="min-w-0 text-[13px] font-medium text-muted-foreground wrap-anywhere">{job.company}</span>
                     </span>
                     <span className="mb-2.5 text-[15px] leading-snug font-semibold tracking-[-0.015em] text-foreground wrap-anywhere">{job.title}</span>
+                    {job.match && matchReason(job.match) && <span className="mb-2 line-clamp-1 text-xs text-foreground/80"><span className="sr-only">Matches: </span>{matchReason(job.match)}</span>}
                     {job.location && <span className="mb-5 flex items-start gap-1.5 text-xs leading-5 text-muted-foreground"><MapPin className="mt-1 size-3 shrink-0" aria-hidden="true" /><span className="line-clamp-2 wrap-anywhere">{job.location}</span></span>}
                     <span className="flex flex-wrap gap-1.5 text-[11px]">
                         {job.isRemote && <span className="rounded-md bg-primary/8 px-2 py-1 text-primary">Remote</span>}

@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 import asyncpg
 
 from .config import Settings
+from .job_signals import SENIORITY_LABELS, JobSignals
 from .matching import WatchMatcher
 from .models import NormalizedJob, ReconcileSummary, ScanResult, Source
 from .source_keys import make_source_key
@@ -184,7 +185,7 @@ class Repository:
                     adapter,
                     {
                         "identifier": identifier,
-                        "include_descriptions": False,
+                        "include_descriptions": True,
                         "closure_safe": closure_safe,
                     },
                     row.get("careers_url") or None,
@@ -603,6 +604,7 @@ class Repository:
                 content_hash = job.content_hash()
                 payload = job.database_payload()
                 matches_watch = self.matcher.matches(job.title)
+                signals = JobSignals.derive(job.title, job.location, job.description_text)
                 if current is None:
                     job_id = await connection.fetchval(
                         """
@@ -610,9 +612,11 @@ class Repository:
                           source_id, external_job_id, title, location, canonical_url,
                           apply_url, published_at, description_text, employment_type,
                           is_remote, current_content_hash, raw, first_seen_scan_id,
-                          last_seen_scan_id
+                          last_seen_scan_id, skills, role_families, seniority, min_years,
+                          countries, no_sponsorship
                         ) VALUES (
-                          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13
+                          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13,
+                          $14, $15, $16, $17, $18, $19
                         ) RETURNING id
                         """,
                         claim.source.id,
@@ -628,6 +632,12 @@ class Repository:
                         content_hash,
                         job.raw,
                         claim.scan_id,
+                        signals.skills,
+                        signals.role_families,
+                        signals.seniority,
+                        signals.min_years,
+                        signals.countries,
+                        signals.no_sponsorship,
                     )
                     version_id = await self._insert_version(
                         connection,
@@ -698,7 +708,9 @@ class Repository:
                     )
                     updated += 1
                 else:
-                    unchanged_rows.append({"id": current["id"], "raw": job.raw})
+                    unchanged_rows.append(
+                        {"id": current["id"], "raw": job.raw, **signals.as_record()}
+                    )
                     unchanged += 1
 
             if unchanged_rows:
@@ -708,8 +720,15 @@ class Repository:
                     """
                     UPDATE jobs AS current SET
                       last_seen_scan_id = $2, last_seen_at = now(),
-                      missing_full_scans = 0, raw = seen.raw, updated_at = now()
-                    FROM jsonb_to_recordset($1::jsonb) AS seen(id bigint, raw jsonb)
+                      missing_full_scans = 0, raw = seen.raw, updated_at = now(),
+                      skills = seen.skills, role_families = seen.role_families,
+                      seniority = seen.seniority, min_years = seen.min_years,
+                      countries = seen.countries, no_sponsorship = seen.no_sponsorship
+                    FROM jsonb_to_recordset($1::jsonb) AS seen(
+                      id bigint, raw jsonb, skills text[], role_families text[],
+                      seniority smallint, min_years smallint, countries text[],
+                      no_sponsorship boolean
+                    )
                     WHERE current.id = seen.id AND current.source_id = $3
                     """,
                     unchanged_rows,
@@ -831,6 +850,7 @@ class Repository:
         scan_id: int,
         version_no: int,
     ) -> None:
+        signals = JobSignals.derive(job.title, job.location, job.description_text)
         await connection.execute(
             """
             UPDATE jobs SET title = $2, location = $3, canonical_url = $4,
@@ -839,7 +859,9 @@ class Repository:
               lifecycle_state = 'open', closed_at = NULL, missing_full_scans = 0,
               current_version_no = $10, current_content_hash = $11, raw = $12,
               last_seen_scan_id = $13, last_seen_at = now(), last_changed_at = now(),
-              last_opened_at = now(), updated_at = now()
+              last_opened_at = now(), updated_at = now(),
+              skills = $14, role_families = $15, seniority = $16, min_years = $17,
+              countries = $18, no_sponsorship = $19
             WHERE id = $1
             """,
             job_id,
@@ -855,6 +877,12 @@ class Repository:
             content_hash,
             job.raw,
             scan_id,
+            signals.skills,
+            signals.role_families,
+            signals.seniority,
+            signals.min_years,
+            signals.countries,
+            signals.no_sponsorship,
         )
 
     async def _insert_version(
@@ -1053,6 +1081,127 @@ class Repository:
             "nextCursor": page[-1]["id"] if has_more else None,
             "hasMore": has_more,
         }
+
+    async def match_jobs(
+        self,
+        *,
+        skills: list[str],
+        families: list[str],
+        levels: list[int],
+        years: float | None,
+        country: str | None,
+        needs_sponsorship: bool,
+        remote_only: bool,
+        limit: int = 24,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """Rank open jobs for one candidate; hard filters first, then relevance."""
+        rows = await self.pool.fetch(
+            """
+            WITH candidates AS (
+              SELECT j.id, j.title, j.location, j.canonical_url, j.apply_url,
+                     j.published_at, j.first_seen_at, j.employment_type,
+                     j.is_remote, s.source_key, c.name AS company, c.domain,
+                     j.seniority, j.role_families,
+                     ARRAY(
+                       SELECT unnest(j.skills) INTERSECT SELECT unnest($1::text[]) ORDER BY 1
+                     ) AS matched_skills,
+                     j.role_families && $2::text[] AS family_match
+              FROM jobs j
+              JOIN job_sources s ON s.id = j.source_id
+              JOIN companies c ON c.id = s.company_id
+              WHERE j.lifecycle_state = 'open' AND s.status = 'active'
+                AND (j.seniority IS NULL OR j.seniority = ANY($3::smallint[]))
+                AND ($4::real IS NULL OR j.min_years IS NULL OR j.min_years <= $4 + 1)
+                AND ($5::text IS NULL OR cardinality(j.countries) = 0
+                     OR $5 = ANY(j.countries))
+                AND (NOT $6::boolean OR NOT j.no_sponsorship)
+                AND (NOT $7::boolean OR j.is_remote IS TRUE
+                     OR coalesce(j.location, '') ~* '\\m(remote|anywhere)\\M')
+            ), scored AS (
+              SELECT *,
+                     (CASE WHEN family_match THEN 10 ELSE 0 END)
+                     + 2 * cardinality(matched_skills)
+                     + (CASE WHEN seniority IS NOT NULL THEN 1 ELSE 0 END) AS score
+              FROM candidates
+              WHERE (cardinality($2::text[]) = 0 AND cardinality($1::text[]) = 0)
+                 OR family_match
+                 OR (cardinality(role_families) = 0 AND cardinality(matched_skills) >= 3)
+                 OR cardinality(matched_skills) >= 5
+                 OR (cardinality($2::text[]) = 0 AND cardinality(matched_skills) >= 2)
+            )
+            SELECT * FROM scored
+            ORDER BY score DESC, id DESC
+            LIMIT $8 OFFSET $9
+            """,
+            skills,
+            families,
+            levels,
+            years,
+            country,
+            needs_sponsorship,
+            remote_only,
+            limit + 1,
+            offset,
+        )
+        has_more = len(rows) > limit
+        items = []
+        for row in rows[:limit]:
+            item = self._public_job(row)
+            level = row["seniority"]
+            item["match"] = {
+                "score": row["score"],
+                "skills": list(row["matched_skills"]),
+                "roleMatch": row["family_match"],
+                "level": SENIORITY_LABELS[level] if level is not None else None,
+            }
+            items.append(item)
+        return {
+            "items": items,
+            "nextCursor": offset + limit if has_more else None,
+            "hasMore": has_more,
+        }
+
+    async def refresh_signals(self, batch_size: int = 500) -> int:
+        """Recompute match signals for open jobs from their stored text."""
+        refreshed = 0
+        last_id = 0
+        while True:
+            rows = await self.pool.fetch(
+                """
+                SELECT id, title, location, description_text FROM jobs
+                WHERE lifecycle_state = 'open' AND id > $1 ORDER BY id LIMIT $2
+                """,
+                last_id,
+                batch_size,
+            )
+            if not rows:
+                return refreshed
+            records = [
+                {
+                    "id": row["id"],
+                    **JobSignals.derive(
+                        row["title"], row["location"], row["description_text"]
+                    ).as_record(),
+                }
+                for row in rows
+            ]
+            await self.pool.execute(
+                """
+                UPDATE jobs AS current SET
+                  skills = seen.skills, role_families = seen.role_families,
+                  seniority = seen.seniority, min_years = seen.min_years,
+                  countries = seen.countries, no_sponsorship = seen.no_sponsorship
+                FROM jsonb_to_recordset($1::jsonb) AS seen(
+                  id bigint, skills text[], role_families text[], seniority smallint,
+                  min_years smallint, countries text[], no_sponsorship boolean
+                )
+                WHERE current.id = seen.id
+                """,
+                records,
+            )
+            refreshed += len(rows)
+            last_id = rows[-1]["id"]
 
     async def get_job(self, job_id: int) -> dict[str, Any] | None:
         row = await self.pool.fetchrow(

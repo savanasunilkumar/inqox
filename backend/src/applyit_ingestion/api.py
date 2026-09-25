@@ -5,9 +5,11 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Path, Query, Request
+from pydantic import BaseModel, Field
 
 from .config import Settings
 from .db import Database
+from .job_signals import acceptable_seniority, country_code, extract_skills, role_families
 from .repository import Repository
 
 settings = Settings.from_env()
@@ -74,6 +76,46 @@ async def list_jobs(
     return await repo.list_jobs(
         limit, before=before, q=q, company=company, location=location, remote=remote
     )
+
+
+class CandidateProfile(BaseModel):
+    text: str = Field(default="", max_length=200_000)
+    titles: list[Annotated[str, Field(max_length=200)]] = Field(default_factory=list, max_length=50)
+    skills: list[Annotated[str, Field(max_length=100)]] = Field(
+        default_factory=list, max_length=200
+    )
+    years_experience: float | None = Field(default=None, ge=0, le=60, alias="yearsExperience")
+    work_country: str | None = Field(default=None, max_length=100, alias="workCountry")
+    needs_sponsorship: bool = Field(default=False, alias="needsSponsorship")
+    remote_only: bool = Field(default=False, alias="remoteOnly")
+    limit: int = Field(default=24, ge=1, le=100)
+    offset: int = Field(default=0, ge=0, le=10_000)
+
+
+@app.post("/jobs/matches", dependencies=[Depends(require_token)])
+async def match_jobs(repo: RepositoryDependency, profile: CandidateProfile) -> dict[str, object]:
+    titles = [title for title in profile.titles if title.strip()]
+    skills = sorted(
+        set(extract_skills(profile.text)) | set(extract_skills(", ".join(profile.skills)))
+    )
+    families = sorted({family for title in titles for family in role_families(title)})
+    levels = acceptable_seniority(profile.years_experience, titles)
+    country = country_code(profile.work_country)
+    page = await repo.match_jobs(
+        skills=skills,
+        families=families,
+        levels=levels,
+        years=profile.years_experience,
+        country=country,
+        needs_sponsorship=profile.needs_sponsorship,
+        remote_only=profile.remote_only,
+        limit=profile.limit,
+        offset=profile.offset,
+    )
+    return {
+        **page,
+        "profile": {"skills": skills, "roles": families, "levels": levels, "country": country},
+    }
 
 
 @app.get("/jobs/{job_id}", dependencies=[Depends(require_token)])

@@ -11,6 +11,14 @@ export type Job = {
   employmentType: string | null;
   isRemote: boolean | null;
   sourceKey: string;
+  match?: JobMatch;
+};
+
+export type JobMatch = {
+  score: number;
+  skills: string[];
+  roleMatch: boolean;
+  level: string | null;
 };
 
 export type JobsPage = {
@@ -25,6 +33,18 @@ export type JobsResult =
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
+}
+
+function parseMatch(value: unknown): JobMatch | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const match = value as Record<string, unknown>;
+  if (typeof match.score !== "number") return undefined;
+  return {
+    score: match.score,
+    skills: Array.isArray(match.skills) ? match.skills.filter((skill): skill is string => typeof skill === "string") : [],
+    roleMatch: match.roleMatch === true,
+    level: stringOrNull(match.level),
+  };
 }
 
 export function parseJob(value: unknown): Job | null {
@@ -49,6 +69,7 @@ export function parseJob(value: unknown): Job | null {
     employmentType: stringOrNull(source.employmentType),
     isRemote: typeof source.isRemote === "boolean" ? source.isRemote : null,
     sourceKey: stringOrNull(source.sourceKey) ?? "",
+    ...(parseMatch(source.match) ? { match: parseMatch(source.match) } : {}),
   };
 }
 

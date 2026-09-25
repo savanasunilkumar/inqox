@@ -1,6 +1,7 @@
 import "server-only";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { parseJob, parseJobDetail, parseJobsPage, type JobsResult } from "@/lib/job-model";
+import type { CandidateProfile } from "@/lib/job-matching";
 
 const PAGE_SIZE = 18;
 
@@ -16,15 +17,17 @@ function apiBaseUrl(): string | null {
   }
 }
 
-async function apiGet(path: string, params?: URLSearchParams): Promise<Response | null> {
+async function apiGet(path: string, params?: URLSearchParams, init: RequestInit = {}): Promise<Response | null> {
   const base = apiBaseUrl();
   if (!base) return null;
   const url = `${base}${path}${params?.size ? `?${params}` : ""}`;
-  const headers: HeadersInit = { Accept: "application/json" };
+  const headers: Record<string, string> = { Accept: "application/json" };
   const token = getCloudflareContext().env.JOBS_API_TOKEN?.trim();
   if (!token) return null;
   if (token) headers.Authorization = `Bearer ${token}`;
+  if (init.body) headers["Content-Type"] = "application/json";
   return fetch(url, {
+    ...init,
     headers,
     cache: "no-store",
     signal: AbortSignal.timeout(10000),
@@ -37,6 +40,21 @@ export async function getJobs(before: number | null): Promise<JobsResult> {
   if (before) params.set("before", String(before));
   try {
     const response = await apiGet("/jobs", params);
+    if (!response?.ok) return { ok: false, reason: "unavailable" };
+    const page = parseJobsPage(await response.json());
+    return page ? { ok: true, page } : { ok: false, reason: "unavailable" };
+  } catch {
+    return { ok: false, reason: "unavailable" };
+  }
+}
+
+export async function getMatchedJobs(candidate: CandidateProfile, offset: number): Promise<JobsResult> {
+  if (!apiBaseUrl()) return { ok: false, reason: "unconfigured" };
+  try {
+    const response = await apiGet("/jobs/matches", undefined, {
+      method: "POST",
+      body: JSON.stringify({ ...candidate, limit: PAGE_SIZE, offset }),
+    });
     if (!response?.ok) return { ok: false, reason: "unavailable" };
     const page = parseJobsPage(await response.json());
     return page ? { ok: true, page } : { ok: false, reason: "unavailable" };
