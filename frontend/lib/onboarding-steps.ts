@@ -1,55 +1,77 @@
+export type OnboardingGroup = {
+  title: string;
+  rows: string[][];
+  layout?: "grid" | "questions";
+};
+
 export type OnboardingStep = {
   id: "background" | "contact" | "authorization" | "preferences" | "disclosures";
   title: string;
   short: string;
   description: string;
   fields: string[];
-  groups: { title: string; fields: string[] }[];
+  groups: OnboardingGroup[];
   optional?: boolean;
 };
 
+function step(definition: Omit<OnboardingStep, "fields">): OnboardingStep {
+  return { ...definition, fields: definition.groups.flatMap(g => g.rows.flat()) };
+}
+
 export const onboardingSteps: OnboardingStep[] = [
-  {
+  step({
     id: "background",
     title: "Background",
     short: "Background",
-    description: "Extracted from your résumé. Correct anything that looks off.",
-    fields: ["currentTitle", "currentCompany", "yearsExperience", "highestEducation", "school", "degree", "major", "graduationDate"],
-    groups: [{ title: "Most recent role", fields: ["currentTitle", "currentCompany", "yearsExperience"] }, { title: "Highest education", fields: ["highestEducation", "school", "degree", "major", "graduationDate"] }],
-  },
-  {
+    description: "Pulled from your résumé. Fix anything that looks off.",
+    groups: [
+      { title: "Current role", rows: [["currentTitle", "currentCompany", "yearsExperience"]] },
+      { title: "Highest education", rows: [["school"], ["degree", "major"], ["highestEducation", "graduationDate"]] },
+    ],
+  }),
+  step({
     id: "contact",
-    title: "Contact & location",
+    title: "Contact",
     short: "Contact",
-    description: "How recruiters reach you. Most US applications ask for a mailing address.",
-    fields: ["firstName", "lastName", "preferredName", "email", "phone", "linkedIn", "github", "website", "address", "city", "region", "postalCode", "country"],
-    groups: [{ title: "Name", fields: ["firstName", "lastName", "preferredName"] }, { title: "Contact", fields: ["email", "phone"] }, { title: "Links", fields: ["linkedIn", "github", "website"] }, { title: "Mailing address", fields: ["address", "city", "region", "postalCode", "country"] }],
-  },
-  {
+    description: "How recruiters reach you.",
+    groups: [
+      { title: "Name", rows: [["firstName", "lastName", "preferredName"]] },
+      { title: "Email & phone", rows: [["email", "phone"]] },
+      { title: "Links", rows: [["linkedIn", "github"], ["website"]] },
+      { title: "Mailing address", rows: [["address"], ["city", "region", "postalCode"], ["country"]] },
+    ],
+  }),
+  step({
     id: "authorization",
     title: "Work authorization",
     short: "Authorization",
-    description: "Asked on nearly every US application. Used exactly as you answer.",
-    fields: ["workCountry", "authorizedToWork", "sponsorshipNow", "sponsorshipFuture", "visaStatus"],
-    groups: [{ title: "Eligibility", fields: ["workCountry", "authorizedToWork", "sponsorshipNow", "sponsorshipFuture", "visaStatus"] }],
-  },
-  {
+    description: "Asked on nearly every US application.",
+    groups: [
+      { title: "Country", rows: [["workCountry", "visaStatus"]] },
+      { title: "Eligibility", layout: "questions", rows: [["authorizedToWork"], ["sponsorshipNow"], ["sponsorshipFuture"]] },
+    ],
+  }),
+  step({
     id: "preferences",
     title: "Availability & pay",
     short: "Availability",
-    description: "Used to answer screening questions about start date, location and pay.",
-    fields: ["workPreference", "relocation", "travel", "availableDate", "noticePeriod", "salaryAmount", "salaryCurrency", "salaryPeriod"],
-    groups: [{ title: "Work arrangement", fields: ["workPreference", "relocation", "travel"] }, { title: "Start date", fields: ["availableDate", "noticePeriod"] }, { title: "Compensation", fields: ["salaryAmount", "salaryCurrency", "salaryPeriod"] }],
-  },
-  {
+    description: "Answers screening questions about start date, location and pay.",
+    groups: [
+      { title: "Work arrangement", layout: "questions", rows: [["workPreference"], ["relocation"], ["travel"]] },
+      { title: "Start date", rows: [["availableDate", "noticePeriod"]] },
+      { title: "Compensation", rows: [["salaryAmount", "salaryCurrency", "salaryPeriod"]] },
+    ],
+  }),
+  step({
     id: "disclosures",
     title: "Self-identification",
     short: "Self-ID",
     description: "Voluntary EEO questions. Answers never affect eligibility.",
-    fields: ["over18", "gender", "raceEthnicity", "veteranStatus", "disabilityStatus"],
-    groups: [{ title: "Voluntary questions", fields: ["over18", "gender", "raceEthnicity", "veteranStatus", "disabilityStatus"] }],
+    groups: [
+      { title: "Voluntary questions", layout: "questions", rows: [["over18"], ["gender"], ["raceEthnicity"], ["veteranStatus"], ["disabilityStatus"]] },
+    ],
     optional: true,
-  },
+  }),
 ];
 
 const DECLINE = "I don’t wish to answer";

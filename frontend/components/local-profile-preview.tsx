@@ -9,7 +9,6 @@ import { ProfileExperienceSection } from "@/components/profile-experience-sectio
 import { ProfileEducationSection } from "@/components/profile-education-section";
 import { ProfileExtractionLogs } from "@/components/profile-extraction-logs";
 import { ProfileOnboarding } from "@/components/profile-onboarding";
-import { Progress } from "@/components/ui/progress";
 import { profileCompletion } from "@/lib/profile-completion";
 import type { ExtractedEducation, ExtractedExperience } from "@/lib/profile-model";
 import type { ExtractionLogEntry, ResumeExtractionResult } from "@/lib/resume-extractor";
@@ -136,12 +135,6 @@ export function LocalProfilePreview() {
           ))}
         </div>
         <div className="space-y-1">
-          {!completion.complete && (
-            <div className="mb-3 px-2">
-              <div className="flex items-center justify-between text-xs"><span className="font-medium">Profile setup</span><span className="text-muted-foreground tabular-nums">{completion.completed}/{completion.total}</span></div>
-              <Progress value={completion.completed / completion.total * 100} aria-label="Profile completion" className="mt-2" />
-            </div>
-          )}
           <button disabled title="Available in the signed-in app" className="flex h-8 w-full items-center gap-2 px-2 text-[13px] text-muted-foreground">
             <Settings className="size-4" />Settings
           </button>
@@ -193,7 +186,7 @@ export function LocalProfilePreview() {
               {activeTab === "extracted" ? (
                 <div className="flex-1">
                   {showLogs && (
-                    <div className="mx-auto w-full max-w-3xl px-4 pt-6 sm:px-6">
+                    <div className="px-5 pt-6 sm:px-8 lg:pl-[calc(248px+3rem)] lg:pr-12">
                       <ProfileExtractionLogs logs={logs} institutions={detectedInstitutions} companies={detectedCompanies} />
                     </div>
                   )}

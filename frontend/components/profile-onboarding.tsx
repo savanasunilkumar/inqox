@@ -5,12 +5,12 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { Progress } from "@/components/ui/progress";
+import { OnboardingShell, StepStatus, type RailItem } from "@/components/onboarding-rail";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { profileFields } from "@/lib/profile-model";
 import { profileCompletion, requiredProfileFields } from "@/lib/profile-completion";
-import { COUNTRIES, NOTICE_PERIODS, US_STATES, VISA_TYPES, fieldUi, onboardingSteps, type OnboardingStep } from "@/lib/onboarding-steps";
+import { COUNTRIES, NOTICE_PERIODS, US_STATES, VISA_TYPES, fieldUi, onboardingSteps, type OnboardingGroup, type OnboardingStep } from "@/lib/onboarding-steps";
 
 type Completion = ReturnType<typeof profileCompletion>;
 type Props = {
@@ -25,7 +25,6 @@ type Props = {
 
 const required = new Set<string>(requiredProfileFields);
 const fieldByKey = new Map(profileFields.map(f => [f.key, f]));
-const WIDE = new Set(["address", "linkedIn", "github", "website", "workCountry"]);
 const datalists = { countries: COUNTRIES, states: US_STATES, visas: VISA_TYPES, notice: NOTICE_PERIODS };
 
 function errorFor(key: string, value: string | undefined): string {
@@ -38,27 +37,6 @@ function errorFor(key: string, value: string | undefined): string {
 
 function missingIn(step: OnboardingStep, completion: Completion) {
   return step.fields.filter(k => completion.missing.includes(k));
-}
-
-function StepStatus({ done, fraction, active }: { done: boolean; fraction: number; active: boolean }) {
-  if (done) {
-    return (
-      <svg viewBox="0 0 14 14" className="size-3.5 shrink-0 text-primary" aria-hidden="true">
-        <circle cx="7" cy="7" r="7" fill="currentColor" />
-        <path d="M4.2 7.2 6 9l3.8-3.8" fill="none" stroke="var(--background)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    );
-  }
-  const r = 3.5;
-  const c = 2 * Math.PI * r;
-  return (
-    <svg viewBox="0 0 14 14" className={`size-3.5 shrink-0 ${active ? "text-foreground" : "text-muted-foreground"}`} aria-hidden="true">
-      <circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" strokeWidth="1.5" opacity={fraction > 0 ? 1 : 0.6} strokeDasharray={fraction > 0 ? undefined : "2 1.6"} />
-      {fraction > 0 && (
-        <circle cx="7" cy="7" r={r} fill="none" stroke="currentColor" strokeWidth={r * 2} strokeDasharray={`${c * fraction} ${c}`} transform="rotate(-90 7 7)" />
-      )}
-    </svg>
-  );
 }
 
 export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion, background, onSave, finishHref = "/job-board" }: Props) {
@@ -144,99 +122,80 @@ export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion
   }
 
   const showErrors = attempted.has(step.id);
+  const rail: RailItem[] = [
+    { id: "resume", label: "Résumé", done: true, fraction: 1 },
+    ...onboardingSteps.map(s => {
+      const left = missingIn(s, completion).length;
+      const requiredCount = s.fields.filter(f => required.has(f)).length;
+      return {
+        id: s.id,
+        label: s.short,
+        done: s.optional ? s.fields.some(f => fields[f]) : left === 0,
+        fraction: requiredCount ? (requiredCount - left) / requiredCount : 0,
+        left: s.optional ? 0 : left,
+      };
+    }),
+  ];
 
   return (
-    <div ref={top} className="mx-auto w-full max-w-3xl scroll-mt-4 px-4 pt-8 pb-4 sm:px-6 lg:pt-10">
-      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold tracking-tight">{completion.complete ? "Your profile" : "Set up your profile"}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {completion.complete
-              ? "Everything a typical US application asks for is filled in."
-              : "Answer the remaining questions to unlock Job Board, Inbox and Tracker."}
-          </p>
-        </div>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground tabular-nums">
-          <span><span className="text-foreground">{completion.completed}</span> / {completion.total}</span>
-          <Progress value={(completion.completed / completion.total) * 100} aria-label="Required answers completed" className="w-24" />
-        </div>
-      </header>
+    <div ref={top} className="min-h-full scroll-mt-4">
+      <OnboardingShell
+        items={rail}
+        activeId={step.id}
+        onSelect={id => { const index = onboardingSteps.findIndex(s => s.id === id); if (index >= 0) goTo(index); }}
+        completed={completion.completed}
+        total={completion.total}
+      >
+        <section aria-labelledby={`step-${step.id}`}>
+          <header className="mb-8">
+            <p className="text-xs text-muted-foreground tabular-nums">Step {stepIndex + 2} of {onboardingSteps.length + 1}</p>
+            <h2 id={`step-${step.id}`} className="mt-1 text-xl font-semibold tracking-tight">{step.title}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{step.description}</p>
+          </header>
 
-      <nav aria-label="Profile steps" className="mt-6 -mx-4 overflow-x-auto border-b px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
-        <ol className="flex gap-5">
-          {onboardingSteps.map((s, index) => {
-            const left = missingIn(s, completion).length;
-            const requiredCount = s.fields.filter(f => required.has(f)).length;
-            const active = index === stepIndex;
-            const done = s.optional ? s.fields.some(f => fields[f]) : left === 0;
-            return (
-              <li key={s.id} className="shrink-0">
-                <button
-                  type="button"
-                  onClick={() => goTo(index)}
-                  aria-current={active ? "step" : undefined}
-                  className={`-mb-px flex h-9 items-center gap-2 border-b-2 text-[13px] transition-colors outline-none focus-visible:text-foreground ${active ? "border-foreground font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-                >
-                  <StepStatus done={done} active={active} fraction={requiredCount ? (requiredCount - left) / requiredCount : 0} />
-                  {s.short}
-                  {!s.optional && left > 0 && <span className="text-xs text-muted-foreground tabular-nums" aria-label={`${left} required left`}>{left}</span>}
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-      </nav>
+          {step.id === "background" && <div className="mb-12 space-y-12">{background}</div>}
 
-      <section aria-labelledby={`step-${step.id}`} className="mt-8">
-        <div className="mb-8">
-          <h3 id={`step-${step.id}`} className="text-[15px] font-medium">
-            {step.title}
-          </h3>
-          <p className="mt-0.5 text-sm text-muted-foreground">{step.description}</p>
-        </div>
-
-        {step.id === "background" && <div className="mb-10 space-y-10">{background}</div>}
-
-        <div>
-          {step.groups.map(group => (
-            <div key={group.title} className="grid gap-4 border-t py-8 first:border-t-0 first:pt-2 md:grid-cols-[11rem_minmax(0,1fr)] md:gap-10">
-              <h4 className="text-[13px] font-medium text-muted-foreground">{group.title}</h4>
-              <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
-                {group.fields.map(key => (
+          <div>
+            {step.groups.map(group => (
+              <GroupSection
+                key={group.title}
+                group={group}
+                render={(key, layout) => (
                   <FieldRow
                     key={key}
                     fieldKey={key}
+                    layout={layout}
                     value={fields[key] ?? ""}
                     fromResume={!!prefilled[key] && prefilled[key] === fields[key]}
                     error={showErrors && completion.missing.includes(key) ? errorFor(key, fields[key]) : ""}
                     onChange={value => onFieldChange(key, value)}
                   />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="sticky bottom-0 z-20 -mx-4 mt-2 flex items-center justify-between gap-3 border-t bg-background px-4 py-3 sm:mx-0 sm:px-0">
-          <Button variant="ghost" disabled={stepIndex === 0 || saving} onClick={() => goTo(stepIndex - 1)}>Back</Button>
-          <div className="flex min-w-0 items-center gap-3">
-            <p aria-live="polite" className="min-w-0 truncate text-xs">
-              {saveError ? (
-                <span role="alert" className="text-destructive">{saveError}</span>
-              ) : showErrors && stepMissing.length > 0 ? (
-                <span className="text-muted-foreground">{stepMissing.length} {stepMissing.length === 1 ? "answer" : "answers"} left</span>
-              ) : null}
-            </p>
-            <Button disabled={saving} onClick={() => void next()} className="gap-2">
-              {saving ? "Saving…" : isLast ? "Finish" : "Continue"}
-              <KbdGroup className="hidden sm:inline-flex">
-                <Kbd className="bg-primary-foreground/15 text-primary-foreground">⌘</Kbd>
-                <Kbd className="bg-primary-foreground/15 text-primary-foreground">↵</Kbd>
-              </KbdGroup>
-            </Button>
+                )}
+              />
+            ))}
           </div>
-        </div>
-      </section>
+
+          <div className="sticky bottom-0 z-20 -mx-5 flex items-center justify-between gap-3 border-t bg-background px-5 py-3 sm:-mx-8 sm:px-8 lg:mx-0 lg:px-0">
+            <Button variant="ghost" disabled={stepIndex === 0 || saving} onClick={() => goTo(stepIndex - 1)}>Back</Button>
+            <div className="flex min-w-0 items-center gap-3">
+              <p aria-live="polite" className="min-w-0 truncate text-xs">
+                {saveError ? (
+                  <span role="alert" className="text-destructive">{saveError}</span>
+                ) : showErrors && stepMissing.length > 0 ? (
+                  <span className="text-muted-foreground">{stepMissing.length} {stepMissing.length === 1 ? "answer" : "answers"} left</span>
+                ) : null}
+              </p>
+              <Button disabled={saving} onClick={() => void next()} className="gap-2">
+                {saving ? "Saving…" : isLast ? "Finish" : "Continue"}
+                <KbdGroup className="hidden sm:inline-flex">
+                  <Kbd className="bg-primary-foreground/15 text-primary-foreground">⌘</Kbd>
+                  <Kbd className="bg-primary-foreground/15 text-primary-foreground">↵</Kbd>
+                </KbdGroup>
+              </Button>
+            </div>
+          </div>
+        </section>
+      </OnboardingShell>
 
       {Object.entries(datalists).map(([id, values]) => (
         <datalist key={id} id={`onboarding-${id}`}>{values.map(v => <option key={v} value={v} />)}</datalist>
@@ -245,8 +204,31 @@ export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion
   );
 }
 
-function FieldRow({ fieldKey, value, fromResume, error, onChange }: {
-  fieldKey: string; value: string; fromResume: boolean; error: string; onChange: (value: string) => void;
+const ROW_COLUMNS: Record<number, string> = { 1: "", 2: "sm:grid-cols-2", 3: "sm:grid-cols-3" };
+
+function GroupSection({ group, render }: { group: OnboardingGroup; render: (key: string, layout: "stacked" | "question") => React.ReactNode }) {
+  return (
+    <div className="grid gap-4 border-t py-8 first:border-t-0 first:pt-0 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-12">
+      <h3 className="text-[13px] font-medium">{group.title}</h3>
+      {group.layout === "questions" ? (
+        <div className="-mt-3 divide-y">
+          {group.rows.flat().map(key => render(key, "question"))}
+        </div>
+      ) : (
+        <div className="grid gap-5">
+          {group.rows.map(row => (
+            <div key={row.join()} className={`grid gap-x-4 gap-y-5 ${ROW_COLUMNS[row.length] ?? "sm:grid-cols-3"}`}>
+              {row.map(key => render(key, "stacked"))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FieldRow({ fieldKey, layout, value, fromResume, error, onChange }: {
+  fieldKey: string; layout: "stacked" | "question"; value: string; fromResume: boolean; error: string; onChange: (value: string) => void;
 }) {
   const field = fieldByKey.get(fieldKey);
   if (!field) return null;
@@ -313,20 +295,32 @@ function FieldRow({ fieldKey, value, fromResume, error, onChange }: {
     );
   }
 
-  const wide = WIDE.has(fieldKey) || (!!options && !segmented && options.some(o => o.length > 24));
   const message = error.trim() || field.hint?.replace(/^Optional\.\s*/, "");
-  return (
-    <div className={`grid min-w-0 content-start gap-1.5 ${wide ? "sm:col-span-2" : ""}`}>
-      <div className="flex items-baseline justify-between gap-2">
-        <label id={`${id}-label`} htmlFor={segmented ? undefined : id} className="text-[13px] font-medium">
-          {field.label.replace(/ answer$/, "")}
-        </label>
-        {fromResume && <span className="shrink-0 text-[11px] text-muted-foreground">From résumé</span>}
+  const label = (
+    <div className="flex items-baseline justify-between gap-2">
+      <label id={`${id}-label`} htmlFor={segmented ? undefined : id} className="text-[13px] font-medium">
+        {field.label.replace(/ answer$/, "")}
+      </label>
+      {fromResume && <span className="shrink-0 text-[11px] text-muted-foreground">From résumé</span>}
+    </div>
+  );
+  const note = message && (
+    <p id={error.trim() ? `${id}-error` : `${id}-hint`} className={`text-xs ${error.trim() ? "text-destructive" : "text-muted-foreground"}`}>{message}</p>
+  );
+
+  if (layout === "question") {
+    return (
+      <div className="flex flex-col gap-2 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-8">
+        <div className="grid min-w-0 gap-0.5">{label}{note}</div>
+        <div className="w-full shrink-0 sm:w-72">{control}</div>
       </div>
+    );
+  }
+  return (
+    <div className="grid min-w-0 content-start gap-1.5">
+      {label}
       {control}
-      {message && (
-        <p id={error.trim() ? `${id}-error` : `${id}-hint`} className={`text-xs ${error.trim() ? "text-destructive" : "text-muted-foreground"}`}>{message}</p>
-      )}
+      {note}
     </div>
   );
 }

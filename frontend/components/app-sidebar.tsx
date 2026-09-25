@@ -52,6 +52,7 @@ function NavigationItems({ items }: { items: Item[] }) {
 export function AppSidebar() {
   const { user } = useUser();
   const { completion } = useProfile();
+  const pathname = usePathname();
   return (
     <Sidebar collapsible="offcanvas" className="border-r-0!">
       <SidebarContent className="pt-6">
@@ -60,7 +61,7 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="px-2 py-4">
-        {!completion.complete && <Link href="/profile" className="mb-3 block rounded-md px-2 py-1.5 hover:bg-sidebar-accent"><span className="flex items-center justify-between text-xs"><span className="font-medium">Profile setup</span><span className="text-muted-foreground tabular-nums">{completion.completed}/{completion.total}</span></span><Progress value={completion.completed / completion.total * 100} aria-label="Profile completion" className="mt-2" /></Link>}
+        {!completion.complete && pathname !== "/profile" && <Link href="/profile" className="mb-3 block rounded-md px-2 py-1.5 hover:bg-sidebar-accent"><span className="flex items-center justify-between text-xs"><span className="font-medium">Profile setup</span><span className="text-muted-foreground tabular-nums">{completion.completed}/{completion.total}</span></span><Progress value={completion.completed / completion.total * 100} aria-label="Profile completion" className="mt-2" /></Link>}
         <nav aria-label="Account navigation"><NavigationItems items={account} /></nav>
         <div className="mt-3 flex min-w-0 items-center gap-2 border-t px-2 pt-3">
           <UserButton />
