@@ -208,10 +208,13 @@ const ROW_COLUMNS: Record<number, string> = { 1: "", 2: "sm:grid-cols-2", 3: "sm
 
 function GroupSection({ group, render }: { group: OnboardingGroup; render: (key: string, layout: "stacked" | "question") => React.ReactNode }) {
   return (
-    <div className="grid gap-4 border-t py-8 first:border-t-0 first:pt-0 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-12">
-      <h3 className="text-[13px] font-medium">{group.title}</h3>
+    <section className="pb-12">
+      <h3 className="mb-6 flex items-center gap-4 text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+        {group.title}
+        <span aria-hidden="true" className="h-px flex-1 bg-border" />
+      </h3>
       {group.layout === "questions" ? (
-        <div className="-mt-3 divide-y">
+        <div className="-my-3.5 divide-y">
           {group.rows.flat().map(key => render(key, "question"))}
         </div>
       ) : (
@@ -223,7 +226,7 @@ function GroupSection({ group, render }: { group: OnboardingGroup; render: (key:
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 

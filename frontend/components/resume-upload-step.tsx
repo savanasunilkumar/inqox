@@ -85,7 +85,6 @@ export function ResumeUploadStep({ resume, onUpload, onRemove, onDownload, loadR
         <header className="mb-8">
           <p className="text-xs text-muted-foreground tabular-nums">Step 1 of {onboardingSteps.length + 1}</p>
           <h2 className="mt-1 text-xl font-semibold tracking-tight">Import your résumé</h2>
-          <p className="mt-1 text-sm text-muted-foreground">We read it once and prefill every step after this.</p>
         </header>
         <button
           type="button"
@@ -105,18 +104,6 @@ export function ResumeUploadStep({ resume, onUpload, onRemove, onDownload, loadR
             </>
           )}
         </button>
-        <dl className="mt-8 grid gap-x-12 gap-y-3 text-[13px] sm:grid-cols-3">
-          {[
-            ["Background", "Experience, education, current role"],
-            ["Contact", "Name, email, phone, LinkedIn, GitHub"],
-            ["You answer", "Work authorization, availability, pay"],
-          ].map(([term, detail]) => (
-            <div key={term}>
-              <dt className="font-medium">{term}</dt>
-              <dd className="mt-0.5 text-muted-foreground">{detail}</dd>
-            </div>
-          ))}
-        </dl>
         {error && <p role="alert" className="mt-6 text-sm text-destructive">{error}</p>}
       </OnboardingShell>}
       {error && resume && <p role="alert" className="px-6 pb-6 text-sm text-destructive">{error}</p>}
