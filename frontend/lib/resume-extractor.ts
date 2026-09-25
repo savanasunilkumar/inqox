@@ -100,6 +100,8 @@ const JOB_TITLE_KEYWORDS = [
   "project manager", "devops", "sre", "qa", "qa engineer", "full stack", "full-stack",
   "frontend", "backend", "software development engineer", "sde", "sde-1", "sde-2", "sde-3",
   "mts", "member of technical staff", "tech lead", "team lead", "engineering lead", "co-founder", "founder",
+  "assistant", "fellow", "trainee", "working student", "freelance", "freelancer", "instructor",
+  "mentor", "apprentice",
 ];
 
 const COMPANY_SUFFIX_REGEX = /\b(?:inc(?:\.|\b)|llc(?:\.|\b)|corp(?:\.|\b|oration)|ltd(?:\.|\b|imited)|co(?:\.|\b|mpany)|technologies|technology|tech|labs|laboratories|solutions|systems|software|consulting|group|ventures|enterprises|media|interactive|studios|global|health|capital|financial|networks)\b/i;
@@ -206,6 +208,8 @@ export function extractFromResumeText(text: string): ResumeExtractionResult {
   };
 }
 
+const US_STATE_NAMES = new Set(["alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut", "delaware", "florida", "georgia", "hawaii", "idaho", "illinois", "indiana", "iowa", "kansas", "kentucky", "louisiana", "maine", "maryland", "massachusetts", "michigan", "minnesota", "mississippi", "missouri", "montana", "nebraska", "nevada", "new hampshire", "new jersey", "new mexico", "new york", "north carolina", "north dakota", "ohio", "oklahoma", "oregon", "pennsylvania", "rhode island", "south carolina", "south dakota", "tennessee", "texas", "utah", "vermont", "virginia", "washington", "west virginia", "wisconsin", "wyoming"]);
+
 function extractContact(fullText: string, lines: string[], logs: ExtractionLogEntry[]): ResumeExtractionResult["contact"] {
   // Email
   const emailMatch = fullText.match(/\b([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})\b/);
@@ -267,11 +271,21 @@ function extractContact(fullText: string, lines: string[], logs: ExtractionLogEn
   let city = "";
   let region = "";
   let country = "";
-  const locMatch = fullText.match(/\b([A-Z][a-zA-Z\s.-]+),\s*([A-Z]{2}|[A-Z][a-zA-Z\s]+)(?:,\s*([A-Z][a-zA-Z\s]+))?\b/);
-  if (locMatch && !/university|college|school|institute/i.test(locMatch[1])) {
-    city = locMatch[1].trim();
-    region = locMatch[2].trim();
-    country = locMatch[3]?.trim() || (region.length === 2 ? "United States" : "");
+  const headerLines = lines.slice(0, 8);
+  const headerEnd = headerLines.findIndex(l => /^(?:summary|profile|objective|experience|education|skills|work experience)\b/i.test(l.trim()));
+  outer: for (const line of headerEnd === -1 ? headerLines : headerLines.slice(0, headerEnd)) {
+    for (const segment of line.split(/\s*[|•·]\s*|\s{3,}/)) {
+      const m = segment.trim().match(/^([A-Z][a-zA-Z.'-]+(?:\s[A-Z][a-zA-Z.'-]+){0,3}),\s*([A-Z]{2}|[A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+){0,2})(?:,\s*([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+){0,2}))?$/);
+      if (!m || /university|college|school|institute/i.test(m[1])) continue;
+      const regionValue = m[2].trim();
+      const isUsState = US_STATE_CODES.has(regionValue) || US_STATE_NAMES.has(regionValue.toLowerCase());
+      if (!isUsState && !m[3] && !new RegExp(`^(?:${LOCATION_REGIONS})$`, "i").test(regionValue)) continue;
+      city = m[1].trim();
+      region = regionValue;
+      country = m[3]?.trim() || (isUsState ? "United States" : "");
+      logs.push({ category: "info", message: `Home location detected in header: ${city}, ${region}${country ? `, ${country}` : ""}`, sourceLine: line });
+      break outer;
+    }
   }
 
   logs.push({ category: "info", message: `Contact detected: ${firstName} ${lastName} (${email || "no email"})` });
@@ -299,12 +313,13 @@ function identifySections(lines: string[], logs: ExtractionLogEntry[]): { educat
 
   const isExperienceHeader = (line: string) => {
     const clean = line.replace(/^[#*\-–—|•·\s]+|[#*\-–—|•·:\s]+$/g, "").trim().toLowerCase();
-    return /^(?:(?:work|professional|career|relevant|employment|industry)?\s*experience|employment(?:\s+history)?|work\s+history|experience\s+and\s+projects|professional\s+background)(?:\s*(?:&|and|\/)\s*[a-z\s]+)?$/i.test(clean);
+    return /^(?:(?:work|professional|career|relevant|employment|industry|internship)?\s*experiences?|employment(?:\s+history)?|work\s+history|experience\s+and\s+projects|professional\s+(?:background|history)|career\s+history|internships?|positions?|roles)(?:\s*(?:&|and|\/)\s*[a-z\s]+)?$/i.test(clean);
   };
 
   const isOtherHeader = (line: string) => {
     const clean = line.replace(/^[#*\-–—|•·\s]+|[#*\-–—|•·:\s]+$/g, "").trim().toLowerCase();
-    return /^(?:skills|technical\s+skills|projects|certifications|awards|publications|languages|summary|objective|volunteer|patents|interests)$/i.test(clean);
+    // Allows qualifiers such as "AI Projects", "Academic Projects" or "Publications & Recognition".
+    return /^(?:[a-z/-]+\s+){0,2}(?:skills|projects|certifications|awards|publications|languages|summary|objective|volunteer(?:ing)?|patents|interests|achievements|honors|leadership|activities)(?:\s*(?:&|and|\/)\s*[a-z\s]+)?$/i.test(clean);
   };
 
   for (const line of lines) {
@@ -339,14 +354,121 @@ function identifySections(lines: string[], logs: ExtractionLogEntry[]): { educat
   };
 }
 
+const US_STATE_CODES = new Set(
+  ("AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY").split(" "),
+);
+const LOCATION_REGIONS =
+  "united states|usa|u\\.s\\.a?\\.?|us|india|canada|uk|united kingdom|england|germany|france|ireland|netherlands|spain|italy|singapore|japan|china|australia|uae|israel|mexico|brazil|poland|switzerland|sweden|remote|" +
+  "alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming|" +
+  "telangana|andhra pradesh|karnataka|maharashtra|tamil nadu|kerala|delhi|gujarat|west bengal|uttar pradesh|haryana|punjab|rajasthan|ontario|british columbia|quebec|alberta";
+const REGION_TAIL = new RegExp(`,\\s*(?:[A-Z]{2}(?:\\s+\\d{5})?|(?:${LOCATION_REGIONS}))\\.?$`, "i");
+const PURE_LOCATION = new RegExp(`^([A-Z][A-Za-z.' -]{1,30}),\\s*(?:[A-Z]{2}|${LOCATION_REGIONS})$`, "i");
+
+function isPureLocation(line: string): boolean {
+  const match = line.match(PURE_LOCATION);
+  if (!match) return false;
+  const words = match[1].trim().split(/\s+/);
+  return words.length === 1 || (words.length <= 3 && CITY_PREFIXES.has(words[0].toLowerCase()));
+}
+const WORKPLACE_TAIL = /(?:^|[\s,(|–—-]+)\(?(remote|hybrid|on-?site)\)?\.?$/i;
+// First words of common multi-word city names ("San Francisco", "New York", "Santa Clara").
+const CITY_PREFIXES = new Set(
+  ("san santa los las new salt palo mountain redwood fort ft st st. saint des kansas jersey cedar grand ann el la long sioux iowa sunny menlo foster half south north east west white college oklahoma baton little colorado").split(" "),
+);
+
+/**
+ * Splits a trailing location ("Seattle, WA", "Hyderabad, India", "Remote") off an employer or
+ * school line. PDF text extraction joins right-aligned locations onto the same line with only a
+ * space, so the city boundary is inferred from delimiters, the region token, and city prefixes.
+ */
+function splitLocation(raw: string): { name: string; location: string } {
+  const text = raw.trim().replace(/\s*[-–—|•·,]\s*$/, "");
+  if (!text) return { name: "", location: "" };
+
+  const delimited = text.match(/^(.*\S)\s*(?:\||·|•|–|—|\s-\s|\s{2,})\s*([^|·•–—]+)$/);
+  if (delimited) {
+    const tail = delimited[2].trim();
+    if (REGION_TAIL.test(tail) || /^(?:remote|hybrid|on-?site)$/i.test(tail) || new RegExp(`^(?:${LOCATION_REGIONS})$`, "i").test(tail)) {
+      return { name: delimited[1].trim(), location: tail };
+    }
+  }
+
+  const region = text.match(REGION_TAIL);
+  if (region && region.index !== undefined) {
+    const regionCode = region[0].replace(/^,\s*/, "").replace(/\s+\d{5}$/, "");
+    if (regionCode.length === 2 && (regionCode !== regionCode.toUpperCase() || (!US_STATE_CODES.has(regionCode) && !/^(?:US|UK)$/.test(regionCode)))) {
+      return { name: text, location: "" };
+    }
+    const before = text.slice(0, region.index).trim();
+    const words = before.split(/\s+/);
+    if (words.length <= 1) {
+      return { name: before, location: regionCode };
+    }
+    let cityWords = 1;
+    const last2 = words[words.length - 2]?.toLowerCase();
+    const lastPair = words.slice(-2).join(" ").toLowerCase();
+    const last3 = words[words.length - 3]?.toLowerCase();
+    if (words.length >= 4 && last3 && CITY_PREFIXES.has(last3) && /^(?:lake|beach|park|valley)$/i.test(words[words.length - 2] ?? "")) cityWords = 3;
+    else if (words.length >= 3 && ((last2 && CITY_PREFIXES.has(last2)) || new RegExp(`^(?:${LOCATION_REGIONS})$`, "i").test(lastPair))) cityWords = 2;
+    const nameWords = words.slice(0, words.length - cityWords);
+    const cityText = words.slice(words.length - cityWords).join(" ");
+    if (/^[A-Z]/.test(cityText) && nameWords.length > 0 && !COMPANY_SUFFIX_REGEX.test(cityText)) {
+      return {
+        name: nameWords.join(" ").replace(/[\s,|–—-]+$/, ""),
+        location: `${cityText}${region[0]}`.replace(/^[\s,]+/, ""),
+      };
+    }
+  }
+
+  const workplace = text.match(WORKPLACE_TAIL);
+  if (workplace && workplace.index !== undefined && workplace.index > 0) {
+    return { name: text.slice(0, workplace.index).trim(), location: workplace[1] };
+  }
+
+  return { name: text, location: "" };
+}
+
+/**
+ * Removes location text from entry lines (keeping any date range in place) so employer and
+ * school names are parsed without it. Returns the cleaned lines plus the location per line.
+ */
+function separateLocations(
+  lines: string[],
+  dateRegex: RegExp,
+  logs: ExtractionLogEntry[],
+  category: ExtractionLogEntry["category"],
+): { lines: string[]; locations: string[] } {
+  const locations: string[] = [];
+  const cleaned = lines.map((line, idx) => {
+    locations[idx] = "";
+    if (/^[-•*·–—]/.test(line) || line.length > 110 || isPureLocation(line)) return line;
+    const date = line.match(dateRegex);
+    const withoutDate = date ? line.replace(date[0], " ").replace(/\s+/g, " ").trim() : line;
+    const { name, location } = splitLocation(withoutDate);
+    if (!location || !name) return line;
+    locations[idx] = location;
+    logs.push({ category, message: `Separated location "${location}" from "${name}"`, sourceLine: line });
+    return date ? (line.indexOf(date[0]) === 0 ? `${date[0]} ${name}` : `${name} ${date[0]}`) : name;
+  });
+  return { lines: cleaned, locations };
+}
+
 function cleanCompanyName(raw: string): string {
   if (!raw) return "";
   let name = raw.trim();
   // Strip trailing dates, locations, or symbols
   name = name.replace(/\s*[-–—|•·]\s*$/, "");
   name = name.replace(/\s*\(.*?\)\s*$/, "");
-  name = name.replace(/,\s*[A-Z]{2}(?:\s+\d{5})?$/i, ""); // Strip ", CA" or ", CA 94105"
+  name = name.replace(/,\s*[A-Z]{2}(?:\s+\d{5})?$/, ""); // Strip ", CA" or ", CA 94105"
   name = name.replace(/,\s*(?:United States|USA|India|Remote|UK|Canada)$/i, "");
+  // Strip workplace-type markers ("Remote", "(Hybrid)", "- On-site")
+  name = name.replace(/[,\s]*\(?(?:remote|hybrid|on-?site|onsite)\)?\.?$/i, "");
+  name = name.replace(/\s*[-–—|•·]\s*$/, "");
+  // Strip a trailing ", City" tail (1-3 capitalized words that aren't a company suffix)
+  const cityTail = name.match(/,\s*([A-Z][a-zA-Z.'-]+(?:\s+[A-Z][a-zA-Z.'-]+){0,2})$/);
+  if (cityTail && !COMPANY_SUFFIX_REGEX.test(cityTail[1]) && !/\b(?:university|college|institute|school|academy|lab|center|centre)\b/i.test(cityTail[1])) {
+    name = name.slice(0, cityTail.index).trim();
+  }
   return name.trim();
 }
 
@@ -387,11 +509,18 @@ function extractEducation(
   allLines: string[],
   logs: ExtractionLogEntry[]
 ): ExtractedEducation[] {
-  const linesToScan = sectionText ? sectionText.split("\n").map(l => l.trim()).filter(Boolean) : allLines;
+  const rawLines = sectionText ? sectionText.split("\n").map(l => l.trim()).filter(Boolean) : allLines;
   const items: ExtractedEducation[] = [];
 
   const schoolPattern = /\b(?:university|college|institute|polytechnic|school|academy|iit|nit|bits|campus|faculty)\b/i;
   const dateRegex = /\b(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*)?(?:19\d{2}|20\d{2})\b/i;
+  const dateRegexGlobal = new RegExp(dateRegex.source, "gi");
+  const linesToScan = separateLocations(
+    rawLines.map(l => (schoolPattern.test(l) ? l : "")),
+    dateRegex,
+    logs,
+    "institution",
+  ).lines.map((l, idx) => l || rawLines[idx]);
   const gpaRegex = /\b(?:gpa|cgpa):?\s*([0-9]\.\d{1,2}(?:\s*\/\s*(?:4|10)(?:\.0)?)?)/i;
 
   let currentSchool = "";
@@ -454,7 +583,8 @@ function extractEducation(
     // Check Graduation Date
     const dateMatch = line.match(dateRegex);
     if (dateMatch && (/\b(?:grad|class|expected|batch|\d{4})\b/i.test(line))) {
-      if (!currentGrad) currentGrad = dateMatch[0];
+      const dates = line.match(dateRegexGlobal) ?? [dateMatch[0]];
+      if (!currentGrad) currentGrad = /present|current/i.test(line) ? "Present" : dates[dates.length - 1];
     }
   }
 
@@ -523,20 +653,58 @@ function extractExperience(
   allLines: string[],
   logs: ExtractionLogEntry[]
 ): ExtractedExperience[] {
-  const linesToScan = sectionText ? sectionText.split("\n").map(l => l.trim()).filter(Boolean) : allLines;
+  const rawLines = sectionText ? sectionText.split("\n").map(l => l.trim()).filter(Boolean) : allLines;
   const items: ExtractedExperience[] = [];
 
   const dateRangeRegex = /\b(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*)?(?:\d{1,2}\/)?(19\d{2}|20\d{2})\s*(?:-|–|—|to)\s*(?:present|current|now|(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*)?(?:\d{1,2}\/)?(19\d{2}|20\d{2}))\b/i;
+  const { lines: linesToScan, locations: lineLocations } = separateLocations(rawLines, dateRangeRegex, logs, "company");
+
+  const cleanTitle = (value: string) =>
+    value.replace(/^[-–—|•·,/.\s]+|[-–—|•·,/.\s]+$/g, "").trim();
+
+  const isTitleLine = (line: string) =>
+    !!line && JOB_TITLE_KEYWORDS.some(k => line.toLowerCase().includes(k));
+
+  // Employer names are short and capitalized ("Stripe", "Bank of America"); sentence-case prose
+  // such as "Built payment APIs" is kept as a highlight instead.
+  const isNameCased = (line: string) => {
+    const words = line.split(/\s+/);
+    return words.length <= 8 && !/[!?;:]$/.test(line) && !/[a-z]{3,}\.$/.test(line) &&
+      words.every(w => /^[A-Z0-9&(]/.test(w) || /^(?:of|and|the|for|de|la|at|in|&)$/.test(w));
+  };
+
+  const looksLikeCompanyLine = (line: string, idx: number) =>
+    !!line &&
+    line.length > 1 &&
+    line.length < 80 &&
+    !/^[-•*·–—]/.test(line) &&
+    !dateRangeRegex.test(line) &&
+    !/(19|20)\d{2}/.test(line) &&
+    !isTitleLine(line) &&
+    (COMPANY_SUFFIX_REGEX.test(line) || !!lineLocations[idx] || isNameCased(line));
+
+  const SELF_EMPLOYED = /\b(?:independent|freelance|self[- ]employed|contractor|founder)\b/i;
 
   let currentItem: ExtractedExperience | null = null;
+  let lastCompany = "";
+  let lastCompanyWasHeading = false;
+  const consumedIndices = new Set<number>();
+  const rawBullets = new WeakSet<ExtractedExperience>();
+  let lastLineWasHighlight = false;
+  let currentCompanyWasHeading = false;
 
   for (let i = 0; i < linesToScan.length; i++) {
+    if (consumedIndices.has(i)) continue;
     const line = linesToScan[i];
     const dateMatch = line.match(dateRangeRegex);
 
     if (dateMatch) {
       if (currentItem && (currentItem.title || currentItem.company)) {
         items.push(currentItem);
+        if (currentItem.company && currentItem.company !== "Company") {
+          lastCompany = currentItem.company;
+          lastCompanyWasHeading = currentCompanyWasHeading;
+        }
         logs.push({
           category: "company",
           message: `Company & role finalized: "${currentItem.company}" — "${currentItem.title}" (${currentItem.dateRange})`,
@@ -550,9 +718,11 @@ function extractExperience(
       let company = "";
 
       const sameLineWithoutDate = line.replace(dateMatch[0], "").trim();
-      const prevLine1 = i > 0 ? linesToScan[i - 1].trim() : "";
-      const prevLine2 = i > 1 ? linesToScan[i - 2].trim() : "";
+      // Earlier lines with their own date range belong to the previous role.
+      const prevLine1 = i > 0 && !consumedIndices.has(i - 1) && !dateRangeRegex.test(linesToScan[i - 1]) ? linesToScan[i - 1].trim() : "";
+      const prevLine2 = prevLine1 && i > 1 && !consumedIndices.has(i - 2) && !dateRangeRegex.test(linesToScan[i - 2]) ? linesToScan[i - 2].trim() : "";
       const nextLine1 = i + 1 < linesToScan.length ? linesToScan[i + 1].trim() : "";
+      const nextLine2 = i + 2 < linesToScan.length ? linesToScan[i + 2].trim() : "";
 
       // Check if title and company are on the same line
       if (sameLineWithoutDate.length > 3) {
@@ -588,7 +758,7 @@ function extractExperience(
       }
 
       if (!title || !company) {
-        const isPrev1Title = prevLine1 && JOB_TITLE_KEYWORDS.some(k => prevLine1.toLowerCase().includes(k));
+        const isPrev1Title = prevLine1 && !/^[-•*·–—]/.test(prevLine1) && JOB_TITLE_KEYWORDS.some(k => prevLine1.toLowerCase().includes(k));
         const isPrev2Title = prev2Title(prevLine2);
 
         if (isPrev1Title) {
@@ -607,18 +777,51 @@ function extractExperience(
 
       if (!company) {
         // Look for any line with company indicators nearby
-        for (const candidate of [prevLine1, prevLine2, nextLine1]) {
+        for (const [candidate, idx] of [[prevLine1, i - 1], [prevLine2, i - 2], [nextLine1, i + 1]] as const) {
           if (candidate && COMPANY_SUFFIX_REGEX.test(candidate) && !JOB_TITLE_KEYWORDS.some(k => candidate.toLowerCase().includes(k))) {
             company = cleanCompanyName(candidate);
+            if (idx === i + 1) consumedIndices.add(idx);
             break;
           }
         }
       }
 
+      // Date-only line: title and/or company may sit on the following lines
+      if (!title && isTitleLine(nextLine1) && !dateRangeRegex.test(nextLine1)) {
+        title = nextLine1;
+        consumedIndices.add(i + 1);
+      }
+      if (!company && !consumedIndices.has(i + 1) && looksLikeCompanyLine(nextLine1, i + 1)) {
+        company = cleanCompanyName(nextLine1);
+        consumedIndices.add(i + 1);
+      }
+      if (!company && consumedIndices.has(i + 1) && looksLikeCompanyLine(nextLine2, i + 2)) {
+        company = cleanCompanyName(nextLine2);
+        consumedIndices.add(i + 2);
+      }
+
+      if (!company && lastCompany && lastCompanyWasHeading && !SELF_EMPLOYED.test(title)) {
+        // Roles grouped under one employer heading omit the repeated company line
+        company = lastCompany;
+        logs.push({
+          category: "company",
+          message: `No company line found near "${title || "role"}"; reused previous employer "${lastCompany}".`,
+          sourceLine: line,
+        });
+      }
+
+      currentCompanyWasHeading = !!company && [prevLine1, prevLine2].some(l => l && !dateRangeRegex.test(l) && cleanCompanyName(l) === company);
+      if (!currentCompanyWasHeading && company && company === lastCompany) currentCompanyWasHeading = lastCompanyWasHeading;
+
+      const locationIndex = [i, i + 1, i + 2, i - 1, i - 2].find(idx =>
+        idx >= 0 && lineLocations[idx] && (idx >= i ? idx === i || consumedIndices.has(idx) : !consumedIndices.has(idx)),
+      );
+
       currentItem = {
-        title: title || "Role",
+        title: cleanTitle(title) || "Role",
         company: company || "Company",
         dateRange,
+        location: locationIndex !== undefined ? lineLocations[locationIndex] : undefined,
         isCurrent,
         highlights: [],
       };
@@ -632,8 +835,36 @@ function extractExperience(
       continue;
     }
 
+    if (currentItem && currentItem.company === "Company" && currentItem.highlights.length === 0 && looksLikeCompanyLine(line, i)) {
+      currentItem.company = cleanCompanyName(line);
+      if (!currentItem.location && lineLocations[i]) currentItem.location = lineLocations[i];
+      logs.push({ category: "company", message: `Employer line found below the role: "${currentItem.company}"`, sourceLine: line });
+      continue;
+    }
+
+    if (currentItem && !currentItem.location && currentItem.highlights.length === 0 &&
+        isPureLocation(line)) {
+      currentItem.location = line;
+      continue;
+    }
+
+    // An employer heading directly above the next dated role is not a highlight of this one
+    const nextHasDate = [i + 1, i + 2].some(idx => idx < linesToScan.length && dateRangeRegex.test(linesToScan[idx]));
+    if (currentItem && nextHasDate && looksLikeCompanyLine(line, i) && !isTitleLine(line)) {
+      continue;
+    }
+
     if (currentItem) {
-      const isBullet = /^[-•*·–—]\s*/.test(line) || (line.length > 25 && !dateRangeRegex.test(line));
+      const hasMarker = /^[-•*·–—]\s*/.test(line);
+      const previous = currentItem.highlights[currentItem.highlights.length - 1];
+      // PDF text wraps long bullets; an unmarked line continuing a sentence belongs to the bullet above.
+      if (!hasMarker && previous && rawBullets.has(currentItem) && lastLineWasHighlight && (/^[a-z0-9(]/.test(line) || !/[.!?]$/.test(previous))) {
+        currentItem.highlights[currentItem.highlights.length - 1] = `${previous} ${line}`;
+        continue;
+      }
+      const isBullet = hasMarker || (line.length > 25 && !dateRangeRegex.test(line));
+      if (hasMarker) rawBullets.add(currentItem);
+      lastLineWasHighlight = isBullet && currentItem.highlights.length < 6;
       if (isBullet && currentItem.highlights.length < 6) {
         currentItem.highlights.push(line.replace(/^[-•*·–—]\s*/, "").trim());
       }

@@ -8,6 +8,8 @@ import { ProfileSummaryHeader } from "@/components/profile-summary-header";
 import { ProfileExperienceSection } from "@/components/profile-experience-section";
 import { ProfileEducationSection } from "@/components/profile-education-section";
 import { ProfileExtractionLogs } from "@/components/profile-extraction-logs";
+import { ProfileOnboarding } from "@/components/profile-onboarding";
+import { profileCompletion } from "@/lib/profile-completion";
 import type { ExtractedEducation, ExtractedExperience } from "@/lib/profile-model";
 import type { ExtractionLogEntry, ResumeExtractionResult } from "@/lib/resume-extractor";
 
@@ -25,6 +27,12 @@ export function LocalProfilePreview() {
   const [hasEducation, setHasEducation] = useState(false);
   const [hasExperience, setHasExperience] = useState(false);
   const [logs, setLogs] = useState<ExtractionLogEntry[]>([]);
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [prefilled, setPrefilled] = useState<Record<string, string>>({});
+  const completion = profileCompletion({
+    fields,
+    resume: file ? { key: "local", size: file.size, text: file.name } : null,
+  });
 
   const items = [
     { label: "Dashboard", icon: LayoutDashboard },
@@ -51,9 +59,6 @@ export function LocalProfilePreview() {
   async function handleFileUpload(nextFile: File) {
     setBusy("upload");
     try {
-      setFile(nextFile);
-
-      // Call server extraction API
       const formData = new FormData();
       formData.append("file", nextFile);
 
@@ -78,8 +83,15 @@ export function LocalProfilePreview() {
       setEducationList(extracted.education || []);
       setExperienceList(extracted.experience || []);
       setLogs(extracted.logs || []);
+      const values: Record<string, string> = {};
+      for (const [k, v] of Object.entries({ ...extracted.summary, ...extracted.contact })) {
+        if (v) values[k] = v;
+      }
+      setPrefilled(values);
+      setFields(prev => ({ ...values, ...Object.fromEntries(Object.entries(prev).filter(([, v]) => v)) }));
 
       setActiveTab("extracted");
+      setFile(nextFile);
     } finally {
       setBusy("");
     }
@@ -113,10 +125,10 @@ export function LocalProfilePreview() {
       <aside aria-label="Preview navigation" className="hidden w-[11.5rem] shrink-0 flex-col justify-between px-2 pt-6 pb-4 md:flex">
         <div className="space-y-1">
           {items.map(({ label, icon: Icon }) => (
-            <button key={label} disabled className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-[13px] font-medium text-muted-foreground opacity-40">
+            <button key={label} disabled={!completion.complete} title={completion.complete ? undefined : "Complete your profile to unlock"} className={`flex h-8 w-full items-center gap-2 rounded-md px-2 text-[13px] font-medium text-muted-foreground ${completion.complete ? "hover:bg-sidebar-accent hover:text-foreground" : "cursor-not-allowed opacity-40"}`}>
               <Icon className="size-4" />
               <span>{label}</span>
-              <LockKeyhole className="ml-auto size-3" />
+              {!completion.complete && <LockKeyhole className="ml-auto size-3" />}
             </button>
           ))}
         </div>
@@ -148,7 +160,7 @@ export function LocalProfilePreview() {
               onDownload={download}
             />
           ) : (
-            <div className="flex min-h-full flex-col">
+            <div className="flex h-full min-h-0 flex-col">
               <ProfileSummaryHeader
                 resumeName={file.name}
                 resumeSize={file.size}
@@ -170,34 +182,36 @@ export function LocalProfilePreview() {
               />
 
               {activeTab === "extracted" ? (
-                <div className="mx-auto w-full max-w-3xl flex-1 space-y-8 p-6 sm:p-10">
-                  {/* Collapsible Extraction Logs */}
-                  {showLogs && (
-                    <ProfileExtractionLogs
-                      logs={logs}
-                      institutions={detectedInstitutions}
-                      companies={detectedCompanies}
-                    />
-                  )}
-
-                  {/* Work Experience Section (NO box containers) */}
-                  <ProfileExperienceSection
-                    hasExperience={hasExperience}
-                    experienceList={experienceList}
-                    onExperienceListChange={setExperienceList}
-                    onFieldChange={() => {}}
-                  />
-
-                  {/* Education Section (NO box containers) */}
-                  <ProfileEducationSection
-                    hasEducation={hasEducation}
-                    educationList={educationList}
-                    onEducationListChange={setEducationList}
-                    onFieldChange={() => {}}
+                <div className="min-h-0 flex-1">
+                  <ProfileOnboarding
+                    notice={showLogs && (
+                      <ProfileExtractionLogs logs={logs} institutions={detectedInstitutions} companies={detectedCompanies} />
+                    )}
+                    key={file.name + file.size}
+                    fields={fields}
+                    onFieldChange={(key, value) => setFields(prev => ({ ...prev, [key]: value }))}
+                    prefilled={prefilled}
+                    completion={completion}
+                    onSave={async () => { await new Promise(resolve => setTimeout(resolve, 350)); }}
+                    finishHref="/profile"
+                    background={<>
+                      <ProfileExperienceSection
+                        hasExperience={hasExperience}
+                        experienceList={experienceList}
+                        onExperienceListChange={setExperienceList}
+                        onFieldChange={(key, value) => setFields(prev => ({ ...prev, [key]: value }))}
+                      />
+                      <ProfileEducationSection
+                        hasEducation={hasEducation}
+                        educationList={educationList}
+                        onEducationListChange={setEducationList}
+                        onFieldChange={(key, value) => setFields(prev => ({ ...prev, [key]: value }))}
+                      />
+                    </>}
                   />
                 </div>
               ) : (
-                <div className="flex-1 py-4">
+                <div className="min-h-0 flex-1 overflow-y-auto py-4">
                   <ResumeDocument
                     key={file.name + file.size}
                     resume={file}

@@ -70,7 +70,7 @@ async def scan_source(source: Source, settings: Settings) -> ScanResult:
 
     kwargs: dict[str, Any] = {
         "timeout": settings.ats_request_timeout_seconds,
-        "include_descriptions": bool(source.config.get("include_descriptions", False)),
+        "include_descriptions": bool(source.config.get("include_descriptions", True)),
     }
     proxy = source.config.get("proxy")
     if proxy:
@@ -103,7 +103,7 @@ async def scan_source(source: Source, settings: Settings) -> ScanResult:
         try:
             job = job_from_ats(
                 upstream_job,
-                include_description=bool(source.config.get("include_descriptions", False)),
+                include_description=bool(source.config.get("include_descriptions", True)),
             )
         except (TypeError, ValueError):
             invalid += 1

@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { Check, LoaderCircle, Save } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAgentFetch } from "@/lib/use-agent-fetch";
 import { useProfile, ProfileLoading, ProfileLoadError } from "@/components/profile-provider";
 import { ResumeUploadStep } from "@/components/resume-upload-step";
@@ -11,7 +10,8 @@ import { ProfileExperienceSection } from "@/components/profile-experience-sectio
 import { ProfileEducationSection } from "@/components/profile-education-section";
 import { ProfileExtractionLogs } from "@/components/profile-extraction-logs";
 import { extractFromResumeText, type ResumeExtractionResult } from "@/lib/resume-extractor";
-import { Button } from "@/components/ui/button";
+import { ProfileOnboarding } from "@/components/profile-onboarding";
+import { profileCompletion } from "@/lib/profile-completion";
 import type { ExtractedEducation, ExtractedExperience, Profile } from "@/lib/profile-model";
 
 export function ProfileForm() {
@@ -22,7 +22,7 @@ export function ProfileForm() {
 
   return (
     <ProfileFormContent
-      key={profile.updatedAt ?? profile.resume?.uploadedAt ?? "profile-loaded"}
+      key={profile.resume?.uploadedAt ?? "no-resume"}
       profile={profile}
       acceptSaved={acceptSaved}
     />
@@ -41,8 +41,6 @@ function ProfileFormContent({
   const [activeTab, setActiveTab] = useState<"extracted" | "pdf">("extracted");
   const [showLogs, setShowLogs] = useState(false);
   const [busy, setBusy] = useState("");
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [saveError, setSaveError] = useState("");
 
   const replaceInput = useRef<HTMLInputElement>(null);
 
@@ -52,6 +50,15 @@ function ProfileFormContent({
     if (!resumeText) return null;
     return extractFromResumeText(resumeText);
   }, [resumeText]);
+
+  const prefilled = useMemo(() => {
+    const values: Record<string, string> = {};
+    if (!extractionResult) return values;
+    for (const [k, v] of Object.entries({ ...extractionResult.summary, ...extractionResult.contact })) {
+      if (v) values[k] = v;
+    }
+    return values;
+  }, [extractionResult]);
 
   // Initialize fields, merging extraction results into any empty fields
   const [fields, setFields] = useState<Record<string, string>>(() => {
@@ -99,13 +106,10 @@ function ProfileFormContent({
 
   function handleFieldChange(field: string, value: string) {
     setFields(prev => ({ ...prev, [field]: value }));
-    setSaveStatus("idle");
-    setSaveError("");
   }
 
   async function updateResume(method: "PUT" | "DELETE", file?: File) {
     setBusy(method === "PUT" ? "upload" : "remove");
-    setSaveError("");
     try {
       let data: Profile & { error?: string };
       try {
@@ -116,8 +120,7 @@ function ProfileFormContent({
         data = await response.json() as Profile & { error?: string };
         if (!response.ok) throw new Error(data.error || "Couldn’t update your résumé. Please try again.");
       } catch (agentErr) {
-        // Fallback for local development if Cloudflare Worker binding is unavailable
-        if (file && method === "PUT") {
+        if (file && method === "PUT" && process.env.NODE_ENV === "development") {
           const formData = new FormData();
           formData.append("file", file);
           const extractRes = await fetch("/api/extract-resume", { method: "POST", body: formData });
@@ -179,16 +182,22 @@ function ProfileFormContent({
     }
   }
 
-  async function saveProfile() {
-    setSaveStatus("saving");
-    setSaveError("");
-    try {
+  const latest = useRef({ fields, experienceList, educationList, customAnswers: profile.customAnswers || [] });
+  useEffect(() => {
+    latest.current = { fields, experienceList, educationList, customAnswers: profile.customAnswers || [] };
+  }, [fields, experienceList, educationList, profile.customAnswers]);
+  const saveChain = useRef<Promise<void>>(Promise.resolve());
+  const [autosave, setAutosave] = useState<{ state: "idle" | "pending" | "saving" | "saved" | "error"; error?: string }>({ state: "idle" });
+
+  const saveProfile = useCallback(() => {
+    const run = async () => {
+      const { fields, experienceList, educationList, customAnswers } = latest.current;
       const response = await agentFetch("/api/agent/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fields,
-          customAnswers: profile.customAnswers || [],
+          fields: Object.fromEntries(Object.entries(fields).filter(([, v]) => v.trim())),
+          customAnswers,
           educationHistory: educationList,
           experienceHistory: experienceList,
         }),
@@ -196,13 +205,50 @@ function ProfileFormContent({
       const data = await response.json() as Profile & { error?: string };
       if (!response.ok) throw new Error(data.error || "Couldn’t save your profile. Please check the answers.");
       acceptSaved(data);
-      setSaveStatus("saved");
-      setTimeout(() => setSaveStatus("idle"), 3000);
-    } catch (err) {
-      setSaveStatus("error");
-      setSaveError(err instanceof Error ? err.message : "Couldn’t save profile.");
+    };
+    const next = saveChain.current.catch(() => {}).then(run);
+    saveChain.current = next;
+    return next;
+  }, [agentFetch, acceptSaved]);
+  const saveRef = useRef(saveProfile);
+  useEffect(() => {
+    saveRef.current = saveProfile;
+  }, [saveProfile]);
+
+  const snapshot = JSON.stringify([fields, experienceList, educationList]);
+  const savedSnapshot = useRef(snapshot);
+  useEffect(() => {
+    if (savedSnapshot.current === snapshot) return;
+    setAutosave({ state: "pending" });
+    const timer = setTimeout(() => {
+      setAutosave({ state: "saving" });
+      saveRef.current().then(
+        () => {
+          savedSnapshot.current = snapshot;
+          setAutosave({ state: "saved" });
+        },
+        (err: unknown) => setAutosave({ state: "error", error: err instanceof Error ? err.message : "Couldn’t save your changes." }),
+      );
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [snapshot]);
+
+  useEffect(() => {
+    if (autosave.state !== "pending" && autosave.state !== "saving") return;
+    function warn(event: BeforeUnloadEvent) {
+      event.preventDefault();
     }
-  }
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [autosave.state]);
+
+  const autosaveStatus =
+    autosave.state === "pending" || autosave.state === "saving" ? <span className="text-muted-foreground">Saving…</span>
+    : autosave.state === "saved" ? <span className="text-muted-foreground">Saved</span>
+    : autosave.state === "error" ? <span className="text-destructive">Not saved: {autosave.error}</span>
+    : null;
+
+  const completion = profileCompletion({ fields, resume: profile.resume });
 
   if (!profile.resume) {
     return (
@@ -217,7 +263,7 @@ function ProfileFormContent({
   }
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       {/* Hidden file input for Replace */}
       <input
         ref={replaceInput}
@@ -233,7 +279,6 @@ function ProfileFormContent({
         }}
       />
 
-      {/* Summary Header: No sparkles, flat tabs, log toggle */}
       <ProfileSummaryHeader
         resumeName={profile.resume.name}
         resumeSize={profile.resume.size}
@@ -254,74 +299,41 @@ function ProfileFormContent({
         onRemove={() => updateResume("DELETE")}
       />
 
-      {/* Main Content Area: Only Education and Experience */}
       {activeTab === "extracted" ? (
-        <div className="mx-auto w-full max-w-3xl flex-1 space-y-8 p-6 sm:p-10">
-          {/* Collapsible Extraction Logs */}
-          {showLogs && (
-            <ProfileExtractionLogs
-              logs={extractionResult?.logs || []}
-              institutions={detectedInstitutions}
-              companies={detectedCompanies}
-            />
-          )}
-
-          {/* Work Experience Section (NO box containers) */}
-          <ProfileExperienceSection
-            hasExperience={hasExperience}
-            experienceList={experienceList}
-            onExperienceListChange={setExperienceList}
+        <div className="min-h-0 flex-1">
+          <ProfileOnboarding
+            notice={showLogs && (
+              <ProfileExtractionLogs
+                logs={extractionResult?.logs || []}
+                institutions={detectedInstitutions}
+                companies={detectedCompanies}
+              />
+            )}
+            fields={fields}
             onFieldChange={handleFieldChange}
+            prefilled={prefilled}
+            completion={completion}
+            onSave={saveProfile}
+            autosaveStatus={autosaveStatus}
+            background={<>
+              <ProfileExperienceSection
+                hasExperience={hasExperience}
+                experienceList={experienceList}
+                onExperienceListChange={setExperienceList}
+                onFieldChange={handleFieldChange}
+              />
+              <ProfileEducationSection
+                hasEducation={hasEducation}
+                educationList={educationList}
+                onEducationListChange={setEducationList}
+                onFieldChange={handleFieldChange}
+              />
+            </>}
           />
-
-          {/* Education Section (NO box containers) */}
-          <ProfileEducationSection
-            hasEducation={hasEducation}
-            educationList={educationList}
-            onEducationListChange={setEducationList}
-            onFieldChange={handleFieldChange}
-          />
-
-          {/* Clean Flat Save Action Bar */}
-          <div className="sticky bottom-0 -mx-6 -mb-6 flex items-center justify-between border-t bg-background/95 p-4 backdrop-blur sm:-mx-10 sm:-mb-10 sm:px-10">
-            <div className="text-xs">
-              {saveStatus === "saved" ? (
-                <span className="flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400">
-                  <Check className="size-4" />
-                  All changes saved
-                </span>
-              ) : saveError ? (
-                <span className="text-destructive">{saveError}</span>
-              ) : (
-                <span className="text-muted-foreground">
-                  {experienceList.length} {experienceList.length === 1 ? "position" : "positions"} · {educationList.length} {educationList.length === 1 ? "degree" : "degrees"}
-                </span>
-              )}
-            </div>
-
-            <Button
-              size="sm"
-              className="h-8 gap-1.5 px-4 text-xs font-medium"
-              disabled={saveStatus === "saving"}
-              onClick={saveProfile}
-            >
-              {saveStatus === "saving" ? (
-                <>
-                  <LoaderCircle className="size-3.5 animate-spin" />
-                  <span>Saving…</span>
-                </>
-              ) : (
-                <>
-                  <Save className="size-3.5" />
-                  <span>Save</span>
-                </>
-              )}
-            </Button>
-          </div>
         </div>
       ) : (
         /* Original PDF Document Viewer */
-        <div className="flex-1 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto py-4">
           <ResumeDocument
             key={profile.resume.name + profile.resume.size}
             resume={profile.resume}

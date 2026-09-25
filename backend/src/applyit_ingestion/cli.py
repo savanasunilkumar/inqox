@@ -98,6 +98,7 @@ def _parser() -> argparse.ArgumentParser:
     sources = sub.add_parser("sources", help="show source status")
     sources.add_argument("--limit", type=int, default=100)
     sub.add_parser("status", help="show operational counts")
+    sub.add_parser("refresh-signals", help="recompute job match signals from stored text")
 
     prune = sub.add_parser(
         "prune-sandbox-candidate",
@@ -127,7 +128,7 @@ async def _smoke_sources(path: Path, settings: Settings) -> list[dict[str, objec
             adapter=adapter,
             identifier=identifier,
             careers_url=careers_url,
-            config={"include_descriptions": False},
+            config={"include_descriptions": True},
             status="candidate",
             scan_interval_seconds=int(row.get("scan_interval_seconds") or 21600),
             baseline_completed_at=None,
@@ -258,6 +259,8 @@ async def _database_command(args: argparse.Namespace, settings: Settings) -> Non
             output = await repository.source_rows(args.limit)
         elif args.command == "status":
             output = await repository.health_summary()
+        elif args.command == "refresh-signals":
+            output = {"status": "ok", "jobs": await repository.refresh_signals()}
         else:
             raise RuntimeError(f"unsupported command: {args.command}")
         print(json.dumps(output, indent=2, default=str, sort_keys=True))

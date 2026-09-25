@@ -13,9 +13,14 @@ pytestmark = pytest.mark.asyncio
 class StubRepository:
     def __init__(self) -> None:
         self.list_args: dict[str, object] | None = None
+        self.match_args: dict[str, object] | None = None
 
     async def list_jobs(self, limit: int, **kwargs: object) -> dict[str, object]:
         self.list_args = {"limit": limit, **kwargs}
+        return {"items": [], "nextCursor": None, "hasMore": False}
+
+    async def match_jobs(self, **kwargs: object) -> dict[str, object]:
+        self.match_args = kwargs
         return {"items": [], "nextCursor": None, "hasMore": False}
 
     async def get_job(self, job_id: int) -> dict[str, object] | None:
@@ -76,3 +81,47 @@ async def test_job_routes_use_existing_bearer_auth(monkeypatch: pytest.MonkeyPat
             assert response.status_code == 200
     finally:
         api.app.dependency_overrides.clear()
+
+
+async def test_match_route_derives_candidate_signals() -> None:
+    repo = StubRepository()
+    api.app.dependency_overrides[api.repository] = lambda: repo
+    api.app.dependency_overrides[api.require_token] = lambda: None
+    try:
+        transport = httpx.ASGITransport(app=api.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/jobs/matches",
+                json={
+                    "text": "Built services in Python and PostgreSQL on AWS.",
+                    "titles": ["Software Engineer", "Graduate Research Assistant"],
+                    "yearsExperience": 3,
+                    "workCountry": "United States",
+                    "needsSponsorship": True,
+                    "limit": 10,
+                    "offset": 20,
+                },
+            )
+            invalid = await client.post("/jobs/matches", json={"limit": 0})
+    finally:
+        api.app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == {
+        "skills": ["AWS", "PostgreSQL", "Python"],
+        "roles": ["software"],
+        "levels": [1, 2, 3],
+        "country": "US",
+    }
+    assert repo.match_args == {
+        "skills": ["AWS", "PostgreSQL", "Python"],
+        "families": ["software"],
+        "levels": [1, 2, 3],
+        "years": 3.0,
+        "country": "US",
+        "needs_sponsorship": True,
+        "remote_only": False,
+        "limit": 10,
+        "offset": 20,
+    }
+    assert invalid.status_code == 422

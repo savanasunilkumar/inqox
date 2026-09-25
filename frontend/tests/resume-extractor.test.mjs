@@ -87,10 +87,287 @@ ACADEMIC PROJECTS
   assert.equal(result.education[0].degree, "Master’s");
 });
 
+test("extracts company on the line after title + dates", () => {
+  const resume = `
+John Doe
+john@x.com
+
+EXPERIENCE
+Software Engineer | Jan 2020 - Present
+Stripe
+• Built payments infra
+
+Senior Developer | 2018 - 2020
+Datadog
+• Monitoring tools
+`;
+
+  const result = extractFromResumeText(resume);
+
+  assert.equal(result.experience.length, 2);
+  assert.equal(result.experience[0].title, "Software Engineer");
+  assert.equal(result.experience[0].company, "Stripe");
+  assert.equal(result.experience[1].company, "Datadog");
+  assert.equal(result.summary.currentCompany, "Stripe");
+});
+
+test("reuses the employer for consecutive roles at the same company", () => {
+  const resume = `
+Jane Doe
+jane@x.com
+
+EXPERIENCE
+Stripe
+Software Engineer | 2022 - Present
+• Built payments
+Software Engineer Intern | Jun 2020 - Sep 2020
+• Internship work
+`;
+
+  const result = extractFromResumeText(resume);
+
+  assert.equal(result.experience.length, 2);
+  assert.equal(result.experience[0].company, "Stripe");
+  assert.equal(result.experience[1].company, "Stripe");
+});
+
+test("strips city and workplace markers from company names", () => {
+  const resume = `
+Sam Roe
+sam@x.com
+
+EXPERIENCE
+Vercel, San Francisco
+Frontend Engineer
+Mar 2021 - Present
+• Web apps
+
+Acme Corp - Remote
+Backend Engineer | 2019 - 2021
+• APIs
+`;
+
+  const result = extractFromResumeText(resume);
+
+  assert.equal(result.experience.length, 2);
+  assert.equal(result.experience[0].company, "Vercel");
+  assert.equal(result.experience[1].company, "Acme Corp");
+});
+
+test("resolves title and company on lines after a date-only line", () => {
+  const resume = `
+Kai Zen
+kai@x.com
+
+EXPERIENCE
+Jan 2021 - Present
+Software Engineer
+Stripe
+• Built things
+`;
+
+  const result = extractFromResumeText(resume);
+
+  assert.equal(result.experience.length, 1);
+  assert.equal(result.experience[0].title, "Software Engineer");
+  assert.equal(result.experience[0].company, "Stripe");
+});
+
+test("detects an internships section as experience", () => {
+  const resume = `
+Rae Io
+rae@x.com
+
+INTERNSHIPS
+Software Engineer Intern | May 2023 - Aug 2023
+Nvidia
+• GPU kernels
+`;
+
+  const result = extractFromResumeText(resume);
+
+  assert.equal(result.hasExperience, true);
+  assert.equal(result.experience[0].company, "Nvidia");
+});
+
 test("handles empty or blank text gracefully", () => {
   const result = extractFromResumeText("");
   assert.equal(result.hasEducation, false);
   assert.equal(result.hasExperience, false);
   assert.equal(result.education.length, 0);
   assert.equal(result.experience.length, 0);
+});
+
+test("separates right-aligned locations joined onto employer and school lines", () => {
+  const resume = `
+Sam Lee
+sam@x.com
+
+EXPERIENCE
+Stripe San Francisco, CA
+Software Engineer Jan 2022 - Present
+• Built payments infrastructure
+Tata Consultancy Services | Hyderabad, India Jun 2018 - Jul 2020
+Systems Engineer
+• Maintained banking apps
+Palo Alto Networks Santa Clara, CA 2017 - 2018
+Security Analyst
+Google LLC, Mountain View, CA
+Product Manager Intern May 2016 - Aug 2016
+
+EDUCATION
+Iowa State University Ames, IA
+Master of Science in Computer Science Aug 2020 - May 2022
+`;
+
+  const result = extractFromResumeText(resume);
+  const roles = result.experience.map(e => [e.company, e.title, e.location]);
+
+  assert.deepEqual(roles, [
+    ["Stripe", "Software Engineer", "San Francisco, CA"],
+    ["Tata Consultancy Services", "Systems Engineer", "Hyderabad, India"],
+    ["Palo Alto Networks", "Security Analyst", "Santa Clara, CA"],
+    ["Google LLC", "Product Manager Intern", "Mountain View, CA"],
+  ]);
+  assert.equal(result.education[0].school, "Iowa State University");
+  assert.equal(result.education[0].graduationDate, "May 2022");
+  assert.ok(result.logs.some(l => l.message.includes('Separated location "Santa Clara, CA"')));
+});
+
+test("keeps company names that end in a suffix or two-letter word", () => {
+  const resume = `
+EXPERIENCE
+Software Engineer | Jan 2020 - Present
+Acme, Co
+• Built things
+`;
+
+  const result = extractFromResumeText(resume);
+  assert.equal(result.experience[0].company, "Acme, Co");
+});
+
+test("ignores job-title keywords inside bullet points when locating the title", () => {
+  const resume = `
+EXPERIENCE
+Data Analyst | Stripe | Jan 2021 - Present
+• Mentored an intern on payments tooling
+Backend Developer | Jan 2019 - Dec 2020
+Square
+`;
+
+  const result = extractFromResumeText(resume);
+  assert.equal(result.experience[1].title, "Backend Developer");
+  assert.equal(result.experience[1].company, "Square");
+});
+
+test("does not swallow the next dated role after a date-only line", () => {
+  const result = extractFromResumeText(`
+EXPERIENCE
+2018 - 2020
+Software Engineer | 2021 - Present
+Stripe
+`);
+  assert.equal(result.experience.length, 2);
+  assert.equal(result.experience[1].title, "Software Engineer");
+  assert.equal(result.experience[1].dateRange, "2021 - Present");
+});
+
+test("keeps an unbulleted accomplishment as a highlight, not the employer", () => {
+  const result = extractFromResumeText(`
+EXPERIENCE
+Software Engineer | 2022 - Present
+Built payment APIs
+`);
+  assert.notEqual(result.experience[0].company, "Built payment APIs");
+});
+
+test("does not give an unrelated later role the previous employer", () => {
+  const result = extractFromResumeText(`
+EXPERIENCE
+Data Analyst | Acme Corp | 2018 - 2020
+• Built dashboards
+Independent Consultant | 2022 - Present
+• Advised teams
+`);
+  assert.equal(result.experience[0].company, "Acme Corp");
+  assert.notEqual(result.experience[1].company, "Acme Corp");
+});
+
+test("keeps research-lab employers, next-role headings, and multi-word regions out of highlights", () => {
+  const result = extractFromResumeText(`
+Experience
+Graduate Research Assistant Mar 2026 - Aug 2026
+PROSPER, Institute for Transportation, Iowa State University
+Ames, Iowa
+• Built traffic data pipelines in Python
+Thinix Ames, Iowa
+Software Development Intern May 2025 - Dec 2025
+• Built kiosk software
+Anora Instrumentation Pvt. Ltd. Tamil Nadu, India
+Software Engineer (Intern to L2) Apr 2022 - Aug 2024
+• Developed firmware tools
+`);
+  const roles = result.experience.map(e => [e.title, e.company, e.location, e.highlights]);
+  assert.deepEqual(roles, [
+    ["Graduate Research Assistant", "PROSPER, Institute for Transportation, Iowa State University", "Ames, Iowa", ["Built traffic data pipelines in Python"]],
+    ["Software Development Intern", "Thinix", "Ames, Iowa", ["Built kiosk software"]],
+    ["Software Engineer (Intern to L2)", "Anora Instrumentation Pvt. Ltd.", "Tamil Nadu, India", ["Developed firmware tools"]],
+  ]);
+});
+
+test("keeps a suffixed employer line below the title out of bullets and joins wrapped bullets", () => {
+  const result = extractFromResumeText(`
+Experience
+Software Development Intern May 2025 - Dec 2025
+Thinix Ames, Iowa
+- Automated CI/CD pipelines in Azure DevOps, cutting deployment cycles from days to hours.
+Software Engineer (Intern to L2) Apr 2022 - Aug 2024
+Anora Instrumentation Pvt. Ltd. Tamil Nadu, India
+- Led full-stack development of a semiconductor handling system - UI, backend services, and device integrations - used by
+200+ daily operators, improving workflow efficiency by 30%.
+- Designed reusable React/TypeScript architecture adopted by 3 engineering teams.
+`);
+  const anora = result.experience[1];
+  assert.equal(anora.company, "Anora Instrumentation Pvt. Ltd.");
+  assert.equal(anora.location, "Tamil Nadu, India");
+  assert.deepEqual(anora.highlights, [
+    "Led full-stack development of a semiconductor handling system - UI, backend services, and device integrations - used by 200+ daily operators, improving workflow efficiency by 30%.",
+    "Designed reusable React/TypeScript architecture adopted by 3 engineering teams.",
+  ]);
+  assert.deepEqual(result.experience[0].highlights, ["Automated CI/CD pipelines in Azure DevOps, cutting deployment cycles from days to hours."]);
+});
+
+test("stops experience at qualified section headers like AI Projects", () => {
+  const result = extractFromResumeText(`
+Experience
+Software Engineer Apr 2022 - Aug 2024
+Anora Instrumentation Pvt. Ltd. Tamil Nadu, India
+- Designed reusable React architecture.
+AI Projects
+Cipilot - AI Campus Assistant Vertex AI, React Native
+- Built the React Native application.
+`);
+  assert.deepEqual(result.experience[0].highlights, ["Designed reusable React architecture."]);
+});
+
+test("reads home location only from the header, never from bullet prose", () => {
+  const withHeader = extractFromResumeText(`Jane Doe
+Ames, IA | jane@example.com | +1 515 555 1234
+Experience
+Engineer Jan 2020 - Present
+Acme
+- Experience in SQL performance tuning, Azure CI
+`);
+  assert.equal(withHeader.contact.city, "Ames");
+  assert.equal(withHeader.contact.region, "IA");
+  assert.equal(withHeader.contact.country, "United States");
+  const noHeader = extractFromResumeText(`Jane Doe
+jane@example.com | +1 515 555 1234
+Experience
+Engineer Jan 2020 - Present
+Acme
+- Experience in SQL performance tuning, Azure CI
+`);
+  assert.equal(noHeader.contact.city, "");
+  assert.equal(noHeader.contact.region, "");
 });

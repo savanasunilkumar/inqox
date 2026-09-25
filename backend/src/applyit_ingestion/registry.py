@@ -222,7 +222,7 @@ async def import_hosted_registry(
             SELECT company.id, stage.source_key, stage.rate_limit_key, stage.adapter,
               jsonb_build_object(
                 'identifier', stage.identifier,
-                'include_descriptions', false,
+                'include_descriptions', true,
                 'closure_safe', stage.closure_safe
               ),
               NULLIF(stage.careers_url, ''), 'candidate',

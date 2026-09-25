@@ -400,3 +400,88 @@ async def test_registry_bulk_import_is_idempotent_and_workday_is_discoveries_onl
         ("ashby", "candidate", "false"),
         ("workday", "candidate", "false"),
     ]
+
+
+async def test_match_jobs_filters_level_country_sponsorship_and_ranks_by_skills(
+    repository: Repository,
+) -> None:
+    jobs = [
+        NormalizedJob(
+            external_id="fit",
+            title="Software Engineer",
+            location="Austin, TX",
+            canonical_url="https://example.com/jobs/fit",
+            description_text="We use Python, React, PostgreSQL and AWS. 2+ years of experience.",
+        ),
+        NormalizedJob(
+            external_id="weaker",
+            title="Backend Engineer",
+            location="Remote - United States",
+            canonical_url="https://example.com/jobs/weaker",
+            description_text="Go services.",
+        ),
+        NormalizedJob(
+            external_id="too-senior",
+            title="Staff Software Engineer",
+            location="Austin, TX",
+            canonical_url="https://example.com/jobs/staff",
+            description_text="Python and React.",
+        ),
+        NormalizedJob(
+            external_id="abroad",
+            title="Software Engineer",
+            location="Hyderabad, India",
+            canonical_url="https://example.com/jobs/abroad",
+        ),
+        NormalizedJob(
+            external_id="no-visa",
+            title="Software Engineer",
+            location="Austin, TX",
+            canonical_url="https://example.com/jobs/no-visa",
+            description_text="We are unable to sponsor visas for this role.",
+        ),
+        NormalizedJob(
+            external_id="sales",
+            title="Account Executive",
+            location="Austin, TX",
+            canonical_url="https://example.com/jobs/sales",
+        ),
+    ]
+    await apply(repository, jobs)
+
+    page = await repository.match_jobs(
+        skills=["AWS", "PostgreSQL", "Python", "React"],
+        families=["software"],
+        levels=[1, 2],
+        years=2,
+        country="US",
+        needs_sponsorship=True,
+        remote_only=False,
+        limit=1,
+    )
+    assert [item["title"] for item in page["items"]] == ["Software Engineer"]
+    assert page["items"][0]["match"]["skills"] == ["AWS", "PostgreSQL", "Python", "React"]
+    assert page["hasMore"] is True
+    rest = await repository.match_jobs(
+        skills=["AWS", "PostgreSQL", "Python", "React"],
+        families=["software"],
+        levels=[1, 2],
+        years=2,
+        country="US",
+        needs_sponsorship=True,
+        remote_only=False,
+        offset=page["nextCursor"],
+    )
+    assert [item["title"] for item in rest["items"]] == ["Backend Engineer"]
+    assert rest["hasMore"] is False
+
+    remote = await repository.match_jobs(
+        skills=[],
+        families=["software"],
+        levels=[1, 2],
+        years=2,
+        country="US",
+        needs_sponsorship=False,
+        remote_only=True,
+    )
+    assert [item["title"] for item in remote["items"]] == ["Backend Engineer"]
