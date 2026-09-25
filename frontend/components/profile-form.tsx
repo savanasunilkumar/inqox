@@ -214,7 +214,7 @@ function ProfileFormContent({
   }
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       {/* Hidden file input for Replace */}
       <input
         ref={replaceInput}
@@ -251,17 +251,15 @@ function ProfileFormContent({
       />
 
       {activeTab === "extracted" ? (
-        <div className="flex-1">
-          {showLogs && (
-            <div className="px-5 pt-6 sm:px-8 lg:pl-[calc(248px+3rem)] lg:pr-12">
+        <div className="min-h-0 flex-1">
+          <ProfileOnboarding
+            notice={showLogs && (
               <ProfileExtractionLogs
                 logs={extractionResult?.logs || []}
                 institutions={detectedInstitutions}
                 companies={detectedCompanies}
               />
-            </div>
-          )}
-          <ProfileOnboarding
+            )}
             fields={fields}
             onFieldChange={handleFieldChange}
             prefilled={prefilled}
@@ -285,7 +283,7 @@ function ProfileFormContent({
         </div>
       ) : (
         /* Original PDF Document Viewer */
-        <div className="flex-1 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto py-4">
           <ResumeDocument
             key={profile.resume.name + profile.resume.size}
             resume={profile.resume}

@@ -22,6 +22,7 @@ type Props = {
   background: React.ReactNode;
   onSave: () => Promise<void>;
   finishHref?: string;
+  notice?: React.ReactNode;
 };
 
 const required = new Set<string>(requiredProfileFields);
@@ -40,7 +41,7 @@ function missingIn(step: OnboardingStep, completion: Completion) {
   return step.fields.filter(k => completion.missing.includes(k));
 }
 
-export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion, background, onSave, finishHref = "/job-board" }: Props) {
+export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion, background, onSave, finishHref = "/job-board", notice }: Props) {
   const [stepIndex, setStepIndex] = useState(() => {
     const first = onboardingSteps.findIndex(s => missingIn(s, completion).length > 0);
     return first === -1 ? 0 : first;
@@ -50,6 +51,7 @@ export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion
   const [saveError, setSaveError] = useState("");
   const [finished, setFinished] = useState(false);
   const top = useRef<HTMLDivElement>(null);
+  const body = useRef<HTMLDivElement>(null);
   const nextRef = useRef<() => Promise<void>>(async () => {});
 
   const step = onboardingSteps[stepIndex];
@@ -57,7 +59,8 @@ export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion
   const isLast = stepIndex === onboardingSteps.length - 1;
 
   useEffect(() => {
-    top.current?.scrollIntoView({ block: "start" });
+    body.current?.scrollTo({ top: 0 });
+    top.current?.scrollTo({ top: 0 });
   }, [stepIndex, finished]);
 
   useEffect(() => {
@@ -108,7 +111,7 @@ export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion
 
   if (finished && completion.complete) {
     return (
-      <div ref={top} className="mx-auto w-full max-w-2xl scroll-mt-4 px-4 py-16 sm:px-6">
+      <div ref={top} className="h-full overflow-y-auto"><div className="mx-auto w-full max-w-2xl px-4 py-16 sm:px-6">
         <StepStatus done fraction={1} active />
         <h2 className="mt-4 text-lg font-semibold tracking-tight">Profile complete</h2>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -118,7 +121,7 @@ export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion
           <Button asChild><Link href={finishHref}>Go to Job Board</Link></Button>
           <Button variant="ghost" onClick={() => { setFinished(false); goTo(0); }}>Review answers</Button>
         </div>
-      </div>
+      </div></div>
     );
   }
 
@@ -139,22 +142,43 @@ export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion
   ];
 
   return (
-    <div ref={top} className="min-h-full scroll-mt-4">
+    <section aria-labelledby={`step-${step.id}`} className="h-full min-h-0">
       <OnboardingShell
         items={rail}
         activeId={step.id}
         onSelect={id => { const index = onboardingSteps.findIndex(s => s.id === id); if (index >= 0) goTo(index); }}
         completed={completion.completed}
         total={completion.total}
-      >
-        <section aria-labelledby={`step-${step.id}`}>
-          <header className="mb-8">
+        scrollRef={body}
+        header={
+          <header>
             <p className="text-xs text-muted-foreground tabular-nums">Step {stepIndex + 2} of {onboardingSteps.length + 1}</p>
             <h2 id={`step-${step.id}`} className="mt-1 text-xl font-semibold tracking-tight">{step.title}</h2>
             <p className="mt-1 text-sm text-muted-foreground">{step.description}</p>
           </header>
-
-          {step.id === "background" && <div className="mb-12 space-y-12">{background}</div>}
+        }
+        footer={<>
+          <Button variant="ghost" disabled={stepIndex === 0 || saving} onClick={() => goTo(stepIndex - 1)}>Back</Button>
+            <div className="flex min-w-0 items-center gap-3">
+              <p aria-live="polite" className="min-w-0 truncate text-xs">
+                {saveError ? (
+                  <span role="alert" className="text-destructive">{saveError}</span>
+                ) : showErrors && stepMissing.length > 0 ? (
+                  <span className="text-muted-foreground">{stepMissing.length} {stepMissing.length === 1 ? "answer" : "answers"} left</span>
+                ) : null}
+              </p>
+              <Button disabled={saving} onClick={() => void next()} className="gap-2">
+                {saving ? "Saving…" : isLast ? "Finish" : "Continue"}
+                <KbdGroup className="hidden sm:inline-flex">
+                  <Kbd className="bg-primary-foreground/15 text-primary-foreground">⌘</Kbd>
+                  <Kbd className="bg-primary-foreground/15 text-primary-foreground">↵</Kbd>
+                </KbdGroup>
+              </Button>
+            </div>
+        </>}
+      >
+        {notice && <div className="mb-8">{notice}</div>}
+        {step.id === "background" && <div className="mb-12 space-y-12">{background}</div>}
 
           <div>
             {step.groups.map(group => (
@@ -175,30 +199,8 @@ export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion
               />
             ))}
           </div>
-
-          <div className="sticky bottom-0 z-20 -mx-5 flex items-center justify-between gap-3 border-t bg-background px-5 py-3 sm:-mx-8 sm:px-8 lg:mx-0 lg:px-0">
-            <Button variant="ghost" disabled={stepIndex === 0 || saving} onClick={() => goTo(stepIndex - 1)}>Back</Button>
-            <div className="flex min-w-0 items-center gap-3">
-              <p aria-live="polite" className="min-w-0 truncate text-xs">
-                {saveError ? (
-                  <span role="alert" className="text-destructive">{saveError}</span>
-                ) : showErrors && stepMissing.length > 0 ? (
-                  <span className="text-muted-foreground">{stepMissing.length} {stepMissing.length === 1 ? "answer" : "answers"} left</span>
-                ) : null}
-              </p>
-              <Button disabled={saving} onClick={() => void next()} className="gap-2">
-                {saving ? "Saving…" : isLast ? "Finish" : "Continue"}
-                <KbdGroup className="hidden sm:inline-flex">
-                  <Kbd className="bg-primary-foreground/15 text-primary-foreground">⌘</Kbd>
-                  <Kbd className="bg-primary-foreground/15 text-primary-foreground">↵</Kbd>
-                </KbdGroup>
-              </Button>
-            </div>
-          </div>
-        </section>
       </OnboardingShell>
-
-    </div>
+    </section>
   );
 }
 

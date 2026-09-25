@@ -162,7 +162,7 @@ export function LocalProfilePreview() {
               onDownload={download}
             />
           ) : (
-            <div className="flex min-h-full flex-col">
+            <div className="flex h-full min-h-0 flex-col">
               <ProfileSummaryHeader
                 resumeName={file.name}
                 resumeSize={file.size}
@@ -184,13 +184,11 @@ export function LocalProfilePreview() {
               />
 
               {activeTab === "extracted" ? (
-                <div className="flex-1">
-                  {showLogs && (
-                    <div className="px-5 pt-6 sm:px-8 lg:pl-[calc(248px+3rem)] lg:pr-12">
-                      <ProfileExtractionLogs logs={logs} institutions={detectedInstitutions} companies={detectedCompanies} />
-                    </div>
-                  )}
+                <div className="min-h-0 flex-1">
                   <ProfileOnboarding
+                    notice={showLogs && (
+                      <ProfileExtractionLogs logs={logs} institutions={detectedInstitutions} companies={detectedCompanies} />
+                    )}
                     key={file.name + file.size}
                     fields={fields}
                     onFieldChange={(key, value) => setFields(prev => ({ ...prev, [key]: value }))}
@@ -215,7 +213,7 @@ export function LocalProfilePreview() {
                   />
                 </div>
               ) : (
-                <div className="flex-1 py-4">
+                <div className="min-h-0 flex-1 overflow-y-auto py-4">
                   <ResumeDocument
                     key={file.name + file.size}
                     resume={file}

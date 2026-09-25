@@ -32,8 +32,11 @@ export function StepStatus({ done, fraction, active }: { done: boolean; fraction
   );
 }
 
-export function OnboardingShell({ items, activeId, onSelect, completed, total, children }: {
+export function OnboardingShell({ items, activeId, onSelect, completed, total, header, footer, scrollRef, children }: {
   items: RailItem[];
+  header: React.ReactNode;
+  footer?: React.ReactNode;
+  scrollRef?: React.Ref<HTMLDivElement>;
   activeId: string;
   onSelect?: (id: string) => void;
   completed: number;
@@ -41,9 +44,9 @@ export function OnboardingShell({ items, activeId, onSelect, completed, total, c
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid min-h-full flex-1 grid-cols-[minmax(0,1fr)] lg:grid-cols-[248px_minmax(0,1fr)]">
-      <aside className="min-w-0 border-b lg:border-r lg:border-b-0">
-        <div className="px-4 pt-5 pb-3 lg:sticky lg:top-0 lg:px-3 lg:py-8">
+    <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[248px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+      <aside className="min-w-0 border-b lg:overflow-y-auto lg:border-r lg:border-b-0">
+        <div className="px-4 pt-5 pb-3 lg:px-3 lg:py-8">
           <div className="px-2">
             <p className="text-[13px] font-medium">Profile setup</p>
             <div className="mt-2.5 flex items-center gap-3">
@@ -78,7 +81,11 @@ export function OnboardingShell({ items, activeId, onSelect, completed, total, c
           </nav>
         </div>
       </aside>
-      <div className="flex min-w-0 flex-col px-5 pt-8 sm:px-8 lg:px-12 lg:pt-10">{children}</div>
+      <div className="flex min-h-0 min-w-0 flex-col">
+        <div className="shrink-0 px-5 pt-6 pb-6 sm:px-8 lg:px-12 lg:pt-10 lg:pb-8">{header}</div>
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 sm:px-8 lg:px-12">{children}</div>
+        {footer && <div className="flex shrink-0 items-center justify-between gap-3 border-t bg-background px-5 py-3 sm:px-8 lg:px-12">{footer}</div>}
+      </div>
     </div>
   );
 }
