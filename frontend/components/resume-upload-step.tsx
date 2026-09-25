@@ -26,6 +26,7 @@ export function ResumeUploadStep({ resume, onUpload, onRemove, onDownload, loadR
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [dragging, setDragging] = useState(false);
+  const [reading, setReading] = useState("");
 
   async function perform(action: string, task: () => Promise<void>) {
     if (working.current) return;
@@ -47,7 +48,12 @@ export function ResumeUploadStep({ resume, onUpload, onRemove, onDownload, loadR
       if (!file.size || file.size > 5 * 1024 * 1024) throw new Error("Choose a PDF between 1 byte and 5 MB.");
       const signature = new TextDecoder().decode(await file.slice(0, 5).arrayBuffer());
       if (signature !== "%PDF-") throw new Error("This file isn’t a valid PDF. Please choose another résumé.");
-      await onUpload(file);
+      setReading(file.name);
+      try {
+        await Promise.all([onUpload(file), new Promise(resolve => setTimeout(resolve, 900))]);
+      } finally {
+        setReading("");
+      }
     });
   }
 
@@ -91,22 +97,29 @@ export function ResumeUploadStep({ resume, onUpload, onRemove, onDownload, loadR
           <Button variant="ghost" disabled>Back</Button>
           <div className="flex min-w-0 items-center gap-3">
             <p aria-live="polite" className="min-w-0 truncate text-xs">
-              {error ? <span role="alert" className="text-destructive">{error}</span> : <span className="text-muted-foreground">Upload a PDF to continue</span>}
+              {error ? <span role="alert" className="text-destructive">{error}</span> : <span className="text-muted-foreground">{busy ? "Extracting…" : "Upload a PDF to continue"}</span>}
             </p>
             <Button disabled>Continue</Button>
           </div>
         </>}
       >
-        <div className="flex h-full min-h-64 pb-8">
+        <div className="flex h-full min-h-64 items-center pb-8">
           <button
             type="button"
             disabled={!!busy}
             onClick={() => input.current?.click()}
             aria-describedby="resume-upload-help"
-            className={`group flex size-full flex-col items-center justify-center rounded-xl border border-dashed px-6 text-center transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-wait ${dragging ? "border-foreground/50 bg-accent" : "border-border hover:border-foreground/30 hover:bg-accent/40"}`}
+            className={`group flex h-4/5 min-h-56 w-full flex-col items-center justify-center rounded-xl border border-dashed px-6 text-center transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-wait ${dragging ? "border-foreground/50 bg-accent" : "border-border hover:border-foreground/30 hover:bg-accent/40"}`}
           >
             {busy ? (
-              <span className="flex items-center gap-2 text-sm font-medium"><LoaderCircle className="size-4 animate-spin" aria-hidden="true" />Reading your résumé…</span>
+              <span role="status" className="flex flex-col items-center">
+                <LoaderCircle className="size-5 animate-spin text-muted-foreground" aria-hidden="true" />
+                <span className="mt-4 text-[15px] font-medium">Reading your résumé…</span>
+                <span className="mt-1.5 max-w-md text-sm text-balance text-muted-foreground">{reading ? `Extracting experience, education and contact details from ${reading}` : "Please wait"}</span>
+                <span aria-hidden="true" className="mt-5 h-0.5 w-40 overflow-hidden rounded-full bg-border">
+                  <span className="block h-full w-1/3 animate-[resume-progress_1.2s_ease-in-out_infinite] rounded-full bg-foreground/60" />
+                </span>
+              </span>
             ) : (
               <>
                 <span className="text-[15px] font-medium">{dragging ? "Release to import" : "Drop your résumé here"}</span>

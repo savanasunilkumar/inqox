@@ -59,9 +59,6 @@ export function LocalProfilePreview() {
   async function handleFileUpload(nextFile: File) {
     setBusy("upload");
     try {
-      setFile(nextFile);
-
-      // Call server extraction API
       const formData = new FormData();
       formData.append("file", nextFile);
 
@@ -94,6 +91,7 @@ export function LocalProfilePreview() {
       setFields(prev => ({ ...values, ...Object.fromEntries(Object.entries(prev).filter(([, v]) => v)) }));
 
       setActiveTab("extracted");
+      setFile(nextFile);
     } finally {
       setBusy("");
     }

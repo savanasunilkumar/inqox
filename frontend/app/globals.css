@@ -242,3 +242,8 @@
 .custom-auth-hint { margin-top: -12px; color: #85907f; font-size: 11px; line-height: 1.6; }
 #clerk-captcha:empty { display: none; }
 @media (max-width: 767px) { .custom-auth-heading h1 { font-size: 32px; } }
+
+@keyframes resume-progress {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}

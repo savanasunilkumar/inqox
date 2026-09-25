@@ -42,10 +42,7 @@ function missingIn(step: OnboardingStep, completion: Completion) {
 }
 
 export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion, background, onSave, finishHref = "/job-board", notice }: Props) {
-  const [stepIndex, setStepIndex] = useState(() => {
-    const first = onboardingSteps.findIndex(s => missingIn(s, completion).length > 0);
-    return first === -1 ? 0 : first;
-  });
+  const [stepIndex, setStepIndex] = useState(0);
   const [attempted, setAttempted] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
