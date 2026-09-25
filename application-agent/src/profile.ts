@@ -14,8 +14,32 @@ const inputSchema = z.object({
     )
     .max(30)
     .default([]),
-  educationHistory: z.array(z.any()).max(20).optional(),
-  experienceHistory: z.array(z.any()).max(30).optional(),
+  educationHistory: z
+    .array(
+      z.object({
+        school: z.string().max(300),
+        degree: z.string().max(300),
+        major: z.string().max(300),
+        graduationDate: z.string().max(100),
+        gpa: z.string().max(20).optional(),
+        rawText: z.string().max(5000).optional(),
+      }),
+    )
+    .max(20)
+    .optional(),
+  experienceHistory: z
+    .array(
+      z.object({
+        company: z.string().max(300),
+        title: z.string().max(300),
+        dateRange: z.string().max(100),
+        location: z.string().max(300).optional(),
+        highlights: z.array(z.string().max(2000)).max(40),
+        isCurrent: z.boolean().optional(),
+      }),
+    )
+    .max(30)
+    .optional(),
 });
 export function json(value: unknown, status = 200) {
   return Response.json(value, {
@@ -188,16 +212,10 @@ export async function profileRequest(
   });
 
   const extracted = extractFromResumeText(text);
+  const replacing = !!profile.resume;
   const updatedFields = { ...profile.fields };
-  for (const [k, v] of Object.entries(extracted.summary)) {
-    if (!updatedFields[k] && v) {
-      updatedFields[k] = v;
-    }
-  }
-  for (const [k, v] of Object.entries(extracted.contact)) {
-    if (!updatedFields[k] && v) {
-      updatedFields[k] = v;
-    }
+  for (const [k, v] of Object.entries({ ...extracted.summary, ...extracted.contact })) {
+    if (v && (replacing || !updatedFields[k])) updatedFields[k] = v;
   }
 
   const response = await saveProfile(
@@ -205,12 +223,8 @@ export async function profileRequest(
     {
       ...profile,
       fields: updatedFields,
-      educationHistory: (profile.educationHistory && profile.educationHistory.length > 0)
-        ? profile.educationHistory
-        : extracted.education,
-      experienceHistory: (profile.experienceHistory && profile.experienceHistory.length > 0)
-        ? profile.experienceHistory
-        : extracted.experience,
+      educationHistory: extracted.education.length > 0 ? extracted.education : profile.educationHistory ?? [],
+      experienceHistory: extracted.experience.length > 0 ? extracted.experience : profile.experienceHistory ?? [],
       resume: {
         name,
         size: bytes.length,

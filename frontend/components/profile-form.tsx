@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAgentFetch } from "@/lib/use-agent-fetch";
 import { useProfile, ProfileLoading, ProfileLoadError } from "@/components/profile-provider";
 import { ResumeUploadStep } from "@/components/resume-upload-step";
@@ -120,8 +120,7 @@ function ProfileFormContent({
         data = await response.json() as Profile & { error?: string };
         if (!response.ok) throw new Error(data.error || "Couldn’t update your résumé. Please try again.");
       } catch (agentErr) {
-        // Fallback for local development if Cloudflare Worker binding is unavailable
-        if (file && method === "PUT") {
+        if (file && method === "PUT" && process.env.NODE_ENV === "development") {
           const formData = new FormData();
           formData.append("file", file);
           const extractRes = await fetch("/api/extract-resume", { method: "POST", body: formData });
@@ -183,21 +182,71 @@ function ProfileFormContent({
     }
   }
 
-  async function saveProfile() {
-    const response = await agentFetch("/api/agent/profile", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        fields: Object.fromEntries(Object.entries(fields).filter(([, v]) => v.trim())),
-        customAnswers: profile.customAnswers || [],
-        educationHistory: educationList,
-        experienceHistory: experienceList,
-      }),
-    });
-    const data = await response.json() as Profile & { error?: string };
-    if (!response.ok) throw new Error(data.error || "Couldn’t save your profile. Please check the answers.");
-    acceptSaved(data);
-  }
+  const latest = useRef({ fields, experienceList, educationList, customAnswers: profile.customAnswers || [] });
+  useEffect(() => {
+    latest.current = { fields, experienceList, educationList, customAnswers: profile.customAnswers || [] };
+  }, [fields, experienceList, educationList, profile.customAnswers]);
+  const saveChain = useRef<Promise<void>>(Promise.resolve());
+  const [autosave, setAutosave] = useState<{ state: "idle" | "pending" | "saving" | "saved" | "error"; error?: string }>({ state: "idle" });
+
+  const saveProfile = useCallback(() => {
+    const run = async () => {
+      const { fields, experienceList, educationList, customAnswers } = latest.current;
+      const response = await agentFetch("/api/agent/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fields: Object.fromEntries(Object.entries(fields).filter(([, v]) => v.trim())),
+          customAnswers,
+          educationHistory: educationList,
+          experienceHistory: experienceList,
+        }),
+      });
+      const data = await response.json() as Profile & { error?: string };
+      if (!response.ok) throw new Error(data.error || "Couldn’t save your profile. Please check the answers.");
+      acceptSaved(data);
+    };
+    const next = saveChain.current.catch(() => {}).then(run);
+    saveChain.current = next;
+    return next;
+  }, [agentFetch, acceptSaved]);
+  const saveRef = useRef(saveProfile);
+  useEffect(() => {
+    saveRef.current = saveProfile;
+  }, [saveProfile]);
+
+  const snapshot = JSON.stringify([fields, experienceList, educationList]);
+  const savedSnapshot = useRef(snapshot);
+  useEffect(() => {
+    if (savedSnapshot.current === snapshot) return;
+    setAutosave({ state: "pending" });
+    const timer = setTimeout(() => {
+      setAutosave({ state: "saving" });
+      saveRef.current().then(
+        () => {
+          savedSnapshot.current = snapshot;
+          setAutosave({ state: "saved" });
+        },
+        (err: unknown) => setAutosave({ state: "error", error: err instanceof Error ? err.message : "Couldn’t save your changes." }),
+      );
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [snapshot]);
+
+  useEffect(() => {
+    if (autosave.state !== "pending" && autosave.state !== "saving") return;
+    function warn(event: BeforeUnloadEvent) {
+      event.preventDefault();
+    }
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [autosave.state]);
+
+  const autosaveStatus =
+    autosave.state === "pending" || autosave.state === "saving" ? <span className="text-muted-foreground">Saving…</span>
+    : autosave.state === "saved" ? <span className="text-muted-foreground">Saved</span>
+    : autosave.state === "error" ? <span className="text-destructive">Not saved: {autosave.error}</span>
+    : null;
 
   const completion = profileCompletion({ fields, resume: profile.resume });
 
@@ -265,6 +314,7 @@ function ProfileFormContent({
             prefilled={prefilled}
             completion={completion}
             onSave={saveProfile}
+            autosaveStatus={autosaveStatus}
             background={<>
               <ProfileExperienceSection
                 hasExperience={hasExperience}

@@ -23,6 +23,7 @@ type Props = {
   onSave: () => Promise<void>;
   finishHref?: string;
   notice?: React.ReactNode;
+  autosaveStatus?: React.ReactNode;
 };
 
 const required = new Set<string>(requiredProfileFields);
@@ -41,7 +42,7 @@ function missingIn(step: OnboardingStep, completion: Completion) {
   return step.fields.filter(k => completion.missing.includes(k));
 }
 
-export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion, background, onSave, finishHref = "/job-board", notice }: Props) {
+export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion, background, onSave, finishHref = "/job-board", notice, autosaveStatus }: Props) {
   const [stepIndex, setStepIndex] = useState(0);
   const [attempted, setAttempted] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
@@ -162,7 +163,7 @@ export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion
                   <span role="alert" className="text-destructive">{saveError}</span>
                 ) : showErrors && stepMissing.length > 0 ? (
                   <span className="text-muted-foreground">{stepMissing.length} {stepMissing.length === 1 ? "answer" : "answers"} left</span>
-                ) : null}
+                ) : autosaveStatus}
               </p>
               <Button disabled={saving} onClick={() => void next()} className="gap-2">
                 {saving ? "Saving…" : isLast ? "Finish" : "Continue"}
