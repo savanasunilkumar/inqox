@@ -1,0 +1,58 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "applyit-ingestion"
+version = "0.1.0"
+description = "Durable, multi-ATS job ingestion and alerting for ApplyIt"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  # Post-release SHA includes the Workday malformed-JSON guard and connector
+  # fixes not present in the 0.2.0 wheel. Keep this immutable until upgrading.
+  "ats-scrapers @ git+https://github.com/kalil0321/ats-scrapers.git@40e49f0a9d180f196dd195c89c78069256ed39ea",
+  "asyncpg>=0.30,<1",
+  "beautifulsoup4>=4.12,<5",
+  "fastapi>=0.116,<1",
+  "httpx>=0.28,<1",
+  "uvicorn[standard]>=0.35,<1",
+]
+
+[project.optional-dependencies]
+# Browser/TLS-backed connectors are intentionally optional because they make
+# the image much larger. Install this extra only for sources that require it.
+all-connectors = [
+  "aiohttp>=3.9",
+  "html2text>=2024.0",
+  "httpcloak>=1.6",
+  "cloakbrowser>=0.3",
+  "pycryptodome>=3.20",
+]
+test = [
+  "pglast>=7.10,<8",
+  "pytest>=8.4,<9",
+  "pytest-asyncio>=1.1,<2",
+]
+dev = ["ruff>=0.12,<1"]
+
+[project.scripts]
+applyit-ingestion = "applyit_ingestion.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/applyit_ingestion"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"migrations" = "applyit_ingestion/migrations"
+"config" = "applyit_ingestion/config"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

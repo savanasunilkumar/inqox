@@ -1,0 +1,94 @@
+name: applyit-ingestion
+
+x-app: &app
+  build:
+    context: .
+    args:
+      INSTALL_ALL_CONNECTORS: ${INSTALL_ALL_CONNECTORS:-false}
+  restart: unless-stopped
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    DATABASE_URL: ${DATABASE_URL:-postgresql://applyit:applyit@postgres:5432/applyit}
+    API_HOST: 0.0.0.0
+    API_PORT: 8080
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-applyit}
+      POSTGRES_USER: ${POSTGRES_USER:-applyit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-applyit}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - applyit_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-applyit} -d $${POSTGRES_DB:-applyit}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    <<: *app
+    restart: "no"
+    command: ["migrate"]
+
+  bootstrap:
+    <<: *app
+    restart: "no"
+    command: ["bootstrap", "--activate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  api:
+    <<: *app
+    command: ["serve"]
+    ports:
+      - "127.0.0.1:${HOST_API_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  scanner:
+    <<: *app
+    command: ["scanner"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      bootstrap:
+        condition: service_completed_successfully
+
+  notifier:
+    <<: *app
+    command: ["notifier"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      bootstrap:
+        condition: service_completed_successfully
+
+volumes:
+  applyit_postgres:

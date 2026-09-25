@@ -1,0 +1,9 @@
+name,domain,adapter,identifier,careers_url,scan_interval_seconds,closure_safe
+Stripe,stripe.com,greenhouse,stripe,https://job-boards.greenhouse.io/stripe,600,true
+Spotify,spotify.com,lever,spotify,https://jobs.lever.co/spotify,600,false
+Linear,linear.app,ashby,linear,https://jobs.ashbyhq.com/linear,600,true
+Visa,visa.com,workday,https://visa.wd5.myworkdayjobs.com/Visa,https://visa.wd5.myworkdayjobs.com/Visa,600,false
+NVIDIA,nvidia.com,workday,https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite,https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite,600,false
+Bunq,bunq.com,recruitee,bunq,https://bunq.recruitee.com,600,false
+G2,g2.com,ashby,G2,https://jobs.ashbyhq.com/G2,600,true
+Rippling,rippling.com,rippling,rippling,https://ats.rippling.com/rippling,600,false

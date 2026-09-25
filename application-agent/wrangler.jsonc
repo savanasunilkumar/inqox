@@ -1,0 +1,67 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "applyit-application-agent",
+  "account_id": "36be7c1a54d196cbf30e4b923fb82fb8",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-23",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": true,
+  "preview_urls": false,
+  "browser": {
+    "binding": "BROWSER"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ApplicationAgent",
+        "class_name": "ApplicationAgent"
+      },
+      {
+        "name": "LiveApplicationAgent",
+        "class_name": "LiveApplicationAgent"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "ApplicationAgent"
+      ]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": [
+        "LiveApplicationAgent"
+      ]
+    }
+  ],
+  "vars": {
+    "SERVICE_AUDIENCE": "https://applyit-application-agent.black-poetry-4fa5.workers.dev",
+    "ALLOWED_SERVICE_ACCOUNTS": "applyit-jobs-runtime@aniflixx-production.iam.gserviceaccount.com,aniflixx-api@aniflixx-production.iam.gserviceaccount.com",
+    "JEV_MODEL": "jev-latest",
+    "CLERK_AUTHORIZED_PARTIES": "https://inqox.com"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "secrets": {
+    "required": [
+      "TYPESAFE_API_KEY",
+      "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
+      "CLERK_SECRET_KEY"
+    ]
+  },
+  "r2_buckets": [
+    {
+      "binding": "PROFILES",
+      "bucket_name": "applyit-application-profiles"
+    }
+  ],
+  "ai": {
+    "binding": "AI"
+  }
+}
