@@ -25,10 +25,11 @@ type Props = {
 
 const required = new Set<string>(requiredProfileFields);
 const fieldByKey = new Map(profileFields.map(f => [f.key, f]));
+const WIDE = new Set(["address", "linkedIn", "github", "website", "workCountry"]);
 const datalists = { countries: COUNTRIES, states: US_STATES, visas: VISA_TYPES, notice: NOTICE_PERIODS };
 
 function errorFor(key: string, value: string | undefined): string {
-  if (!value?.trim()) return "Required";
+  if (!value?.trim()) return " ";
   if (key === "email") return "Enter a valid email address";
   if (key === "yearsExperience") return "Enter a number, like 3";
   if (key === "availableDate") return "Pick a date";
@@ -187,21 +188,20 @@ export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion
       </nav>
 
       <section aria-labelledby={`step-${step.id}`} className="mt-8">
-        <div className="mb-6">
+        <div className="mb-8">
           <h3 id={`step-${step.id}`} className="text-[15px] font-medium">
             {step.title}
-            {step.optional && <span className="ml-2 text-xs font-normal text-muted-foreground">Optional</span>}
           </h3>
           <p className="mt-0.5 text-sm text-muted-foreground">{step.description}</p>
         </div>
 
         {step.id === "background" && <div className="mb-10 space-y-10">{background}</div>}
 
-        <div className="space-y-8">
+        <div>
           {step.groups.map(group => (
-            <div key={group.title}>
-              <h4 className="mb-2 text-xs font-medium text-muted-foreground">{group.title}</h4>
-              <div className="divide-y rounded-lg border bg-card">
+            <div key={group.title} className="grid gap-4 border-t py-8 first:border-t-0 first:pt-2 md:grid-cols-[11rem_minmax(0,1fr)] md:gap-10">
+              <h4 className="text-[13px] font-medium text-muted-foreground">{group.title}</h4>
+              <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
                 {group.fields.map(key => (
                   <FieldRow
                     key={key}
@@ -217,14 +217,14 @@ export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion
           ))}
         </div>
 
-        <div className="sticky bottom-0 z-20 -mx-4 mt-8 flex items-center justify-between gap-3 border-t bg-background px-4 py-3 sm:mx-0 sm:px-0">
+        <div className="sticky bottom-0 z-20 -mx-4 mt-2 flex items-center justify-between gap-3 border-t bg-background px-4 py-3 sm:mx-0 sm:px-0">
           <Button variant="ghost" disabled={stepIndex === 0 || saving} onClick={() => goTo(stepIndex - 1)}>Back</Button>
           <div className="flex min-w-0 items-center gap-3">
             <p aria-live="polite" className="min-w-0 truncate text-xs">
               {saveError ? (
                 <span role="alert" className="text-destructive">{saveError}</span>
               ) : showErrors && stepMissing.length > 0 ? (
-                <span className="text-muted-foreground">{stepMissing.length} required {stepMissing.length === 1 ? "answer" : "answers"} left</span>
+                <span className="text-muted-foreground">{stepMissing.length} {stepMissing.length === 1 ? "answer" : "answers"} left</span>
               ) : null}
             </p>
             <Button disabled={saving} onClick={() => void next()} className="gap-2">
@@ -254,7 +254,7 @@ function FieldRow({ fieldKey, value, fromResume, error, onChange }: {
   const id = `field-${fieldKey}`;
   const isRequired = required.has(fieldKey);
   const options = field.options ?? ui.options;
-  const describedBy = [error && `${id}-error`, field.hint && `${id}-hint`].filter(Boolean).join(" ") || undefined;
+  const describedBy = (error.trim() ? `${id}-error` : field.hint ? `${id}-hint` : undefined);
   const segmented = options && options.length <= 4 && options.every(o => o.length <= 9);
 
   let control: React.ReactNode;
@@ -263,21 +263,20 @@ function FieldRow({ fieldKey, value, fromResume, error, onChange }: {
       <ToggleGroup
         type="single"
         variant="outline"
-        size="sm"
         spacing={0}
         value={value}
         onValueChange={v => { if (v || !isRequired) onChange(v); }}
         aria-labelledby={`${id}-label`}
         aria-describedby={describedBy}
         aria-invalid={!!error || undefined}
-        className={`w-full sm:w-auto ${error ? "rounded-lg ring-1 ring-destructive/60" : ""}`}
+        className={`w-full ${error ? "rounded-lg ring-1 ring-destructive/60" : ""}`}
       >
         {options.map((option, index) => (
           <ToggleGroupItem
             key={option}
             id={index === 0 ? id : undefined}
             value={option}
-            className="flex-1 px-3 data-[state=on]:bg-foreground data-[state=on]:text-background sm:flex-none"
+            className="h-8 flex-1 px-3 data-[state=on]:bg-foreground data-[state=on]:text-background"
           >
             {option}
           </ToggleGroupItem>
@@ -314,22 +313,20 @@ function FieldRow({ fieldKey, value, fromResume, error, onChange }: {
     );
   }
 
+  const wide = WIDE.has(fieldKey) || (!!options && !segmented && options.some(o => o.length > 24));
+  const message = error.trim() || field.hint?.replace(/^Optional\.\s*/, "");
   return (
-    <div className="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_18rem] sm:items-center sm:gap-6">
-      <div className="min-w-0">
+    <div className={`grid min-w-0 content-start gap-1.5 ${wide ? "sm:col-span-2" : ""}`}>
+      <div className="flex items-baseline justify-between gap-2">
         <label id={`${id}-label`} htmlFor={segmented ? undefined : id} className="text-[13px] font-medium">
           {field.label.replace(/ answer$/, "")}
         </label>
-        {(fromResume || !isRequired) && (
-          <span className="ml-2 text-xs text-muted-foreground">{fromResume ? "From résumé" : "Optional"}</span>
-        )}
-        {error ? (
-          <p id={`${id}-error`} className="mt-0.5 text-xs text-destructive">{error}</p>
-        ) : field.hint ? (
-          <p id={`${id}-hint`} className="mt-0.5 text-xs text-muted-foreground">{field.hint}</p>
-        ) : null}
+        {fromResume && <span className="shrink-0 text-[11px] text-muted-foreground">From résumé</span>}
       </div>
       {control}
+      {message && (
+        <p id={error.trim() ? `${id}-error` : `${id}-hint`} className={`text-xs ${error.trim() ? "text-destructive" : "text-muted-foreground"}`}>{message}</p>
+      )}
     </div>
   );
 }

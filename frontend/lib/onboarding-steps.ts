@@ -73,7 +73,7 @@ export const fieldUi: Record<string, FieldUi> = {
   graduationDate: { placeholder: "May 2026" },
   firstName: { autoComplete: "given-name" },
   lastName: { autoComplete: "family-name" },
-  preferredName: { autoComplete: "nickname", placeholder: "Optional" },
+  preferredName: { autoComplete: "nickname" },
   email: { autoComplete: "email", inputMode: "email", placeholder: "you@example.com" },
   phone: { autoComplete: "tel", inputMode: "tel", placeholder: "+1 555 123 4567" },
   linkedIn: { autoComplete: "url", inputMode: "url", placeholder: "https://linkedin.com/in/…" },

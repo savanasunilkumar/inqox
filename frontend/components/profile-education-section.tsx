@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { MoreHorizontal, Plus } from "lucide-react";
+import { AlertTriangle, Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import { EntityLogo } from "@/components/entity-logo";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import type { ExtractedEducation } from "@/lib/profile-model";
 
@@ -101,81 +99,184 @@ export function ProfileEducationSection({
     }
   }
 
-  const editing = showAddForm || editingIndex !== null;
-  const form = (
-    <div className="space-y-4 p-4">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="grid gap-1.5">
-          <Label htmlFor="edu-school" className="text-xs">School</Label>
-          <Input id="edu-school" placeholder="Iowa State University" value={formSchool} onChange={e => setFormSchool(e.target.value)} autoFocus />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="edu-degree" className="text-xs">Degree</Label>
-          <Input id="edu-degree" placeholder="M.S." value={formDegree} onChange={e => setFormDegree(e.target.value)} />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="edu-major" className="text-xs">Field of study</Label>
-          <Input id="edu-major" placeholder="Computer Engineering" value={formMajor} onChange={e => setFormMajor(e.target.value)} />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="edu-grad" className="text-xs">Graduation</Label>
-          <Input id="edu-grad" placeholder="May 2026" value={formGradDate} onChange={e => setFormGradDate(e.target.value)} />
-        </div>
-        <div className="grid gap-1.5 sm:col-span-2">
-          <Label htmlFor="edu-gpa" className="text-xs">GPA <span className="font-normal text-muted-foreground">optional</span></Label>
-          <Input id="edu-gpa" placeholder="3.8 / 4.0" value={formGpa} onChange={e => setFormGpa(e.target.value)} />
-        </div>
-      </div>
-      <div className="flex justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={cancelForm}>Cancel</Button>
-        <Button size="sm" onClick={saveItem} disabled={!formSchool.trim() && !formDegree.trim()}>{editingIndex !== null ? "Save" : "Add school"}</Button>
-      </div>
-    </div>
-  );
-
   return (
-    <section aria-labelledby="education-heading">
-      <div className="mb-2 flex items-center justify-between">
-        <h4 id="education-heading" className="text-xs font-medium text-muted-foreground">
-          Education{educationList.length > 0 && <span className="ml-1.5 tabular-nums">{educationList.length}</span>}
-        </h4>
-        {!editing && (
-          <Button variant="ghost" size="xs" className="text-muted-foreground" onClick={startAdd}>
-            <Plus aria-hidden="true" />Add school
+    <section aria-label="Education" className="space-y-4">
+      {/* Section Header: Open, clean, no box container */}
+      <div className="flex items-baseline justify-between border-b pb-3">
+        <div>
+          <h2 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+            Education
+          </h2>
+          <p className="text-sm font-medium text-foreground">
+            {educationList.length > 0
+              ? `${educationList.length} ${educationList.length === 1 ? "credential" : "credentials"} found`
+              : "Academic credentials"}
+          </p>
+        </div>
+
+        {!showAddForm && editingIndex === null && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1 text-xs text-primary hover:bg-primary/10"
+            onClick={startAdd}
+          >
+            <Plus className="size-3.5" />
+            <span>Add education</span>
           </Button>
         )}
       </div>
 
-      <div className="divide-y rounded-lg border bg-card">
-        {showAddForm && form}
-        {!hasEducation && educationList.length === 0 && !showAddForm && (
-          <p className="px-4 py-6 text-sm text-muted-foreground">No education found in your résumé. Add your highest degree.</p>
-        )}
-        {educationList.map((item, index) => editingIndex === index ? <div key={index}>{form}</div> : (
-          <div key={index} className="flex items-start gap-3 px-4 py-3">
-            <EntityLogo name={item.school} kind="school" />
-            <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-medium">{item.degree}{item.major ? `, ${item.major}` : ""}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {[item.school, item.graduationDate, item.gpa && `GPA ${item.gpa}`].filter(Boolean).map((part, i) => (
-                  <span key={i}>{i > 0 && <span className="px-1.5 text-muted-foreground/50">·</span>}<span className={i === 0 ? "text-foreground/80" : "tabular-nums"}>{part}</span></span>
-                ))}
-              </p>
-            </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon-xs" className="-mr-1 text-muted-foreground" aria-label={`Actions for ${item.school}`}>
-                  <MoreHorizontal />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-36">
-                <DropdownMenuItem onSelect={() => startEdit(index)}>Edit</DropdownMenuItem>
-                <DropdownMenuItem variant="destructive" onSelect={() => removeItem(index)}>Delete</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+      {/* Warning if no education section was detected */}
+      {!hasEducation && educationList.length === 0 && (
+        <div className="flex items-start gap-3 rounded-lg bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="space-y-1">
+            <p className="font-medium">No education section detected in this résumé</p>
+            <p className="text-amber-800/90 dark:text-amber-300/80">
+              Add your university or highest degree so employers have your academic background.
+            </p>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
+
+      {/* Inline Form (Flat, cleanly separated) */}
+      {(showAddForm || editingIndex !== null) && (
+        <div className="space-y-3 rounded-lg bg-muted/40 p-4">
+          <div className="flex items-center justify-between border-b pb-2">
+            <span className="text-xs font-semibold text-foreground">
+              {editingIndex !== null ? "Edit Education" : "New Education"}
+            </span>
+            <button
+              type="button"
+              onClick={cancelForm}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-muted-foreground">
+                University / Institution <span className="text-destructive">*</span>
+              </label>
+              <Input
+                placeholder="e.g. Stanford University"
+                value={formSchool}
+                onChange={e => setFormSchool(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-muted-foreground">
+                Degree <span className="text-destructive">*</span>
+              </label>
+              <Input
+                placeholder="e.g. Bachelor of Science"
+                value={formDegree}
+                onChange={e => setFormDegree(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-muted-foreground">
+                Field of Study / Major <span className="text-destructive">*</span>
+              </label>
+              <Input
+                placeholder="e.g. Computer Science"
+                value={formMajor}
+                onChange={e => setFormMajor(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-muted-foreground">
+                Graduation Date / Year
+              </label>
+              <Input
+                placeholder="e.g. 2024 or May 2024"
+                value={formGradDate}
+                onChange={e => setFormGradDate(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1 sm:col-span-2">
+              <label className="text-[11px] font-medium text-muted-foreground">
+                GPA / Honors (optional)
+              </label>
+              <Input
+                placeholder="e.g. 3.8 / 4.0"
+                value={formGpa}
+                onChange={e => setFormGpa(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={cancelForm}>
+              Cancel
+            </Button>
+            <Button size="sm" className="h-8 gap-1 text-xs" onClick={saveItem}>
+              <Check className="size-3.5" />
+              <span>{editingIndex !== null ? "Update" : "Add"}</span>
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Education List: Open, flat editorial typography, NO boxes */}
+      {educationList.length > 0 && (
+        <div className="divide-y divide-border/40">
+          {educationList.map((item, index) => (
+            <div
+              key={index}
+              className="group py-4 first:pt-1 last:pb-1"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                <EntityLogo name={item.school} kind="school" />
+                <div className="space-y-0.5">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {item.degree}{item.major ? ` in ${item.major}` : ""}
+                  </h3>
+                  <p className="text-xs font-medium text-primary">
+                    {item.school}
+                  </p>
+                  <p className="text-xs text-muted-foreground tabular-nums">
+                    {[
+                      item.graduationDate ? `Graduated ${item.graduationDate}` : "",
+                      item.gpa ? `GPA: ${item.gpa}` : "",
+                    ].filter(Boolean).join(" · ")}
+                  </p>
+                </div>
+                </div>
+
+                <div className="flex items-center gap-1 opacity-70 transition-opacity group-hover:opacity-100">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    onClick={() => startEdit(index)}
+                    title="Edit education"
+                  >
+                    <Pencil className="size-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => removeItem(index)}
+                    title="Delete education"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

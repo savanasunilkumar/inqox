@@ -61,32 +61,20 @@ export function ResumeUploadStep({ resume, onUpload, onRemove, onDownload, loadR
           <Button variant="ghost" size="icon" title="Remove résumé" aria-label="Remove résumé" disabled={!!busy} onClick={() => void perform("remove", onRemove)}>{busy === "remove" ? <LoaderCircle className="animate-spin" /> : <Trash2 />}</Button>
         </div>
         <ResumeDocument key={resume.name + resume.size} resume={resume} loadResume={loadResume} />
-      </> : <div className="flex min-h-[70svh] flex-1 flex-col justify-center px-4 py-12 sm:px-6">
-        <div className="mx-auto w-full max-w-lg">
-          <h2 className="text-lg font-semibold tracking-tight">Upload your résumé</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            We’ll fill in your experience, education, email, phone, LinkedIn and GitHub. You only answer what’s missing, then the rest of the workspace unlocks.
-          </p>
-          <div
-            className={`mt-6 flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed px-6 py-12 text-center transition-colors ${dragging ? "border-foreground/40 bg-muted" : "bg-card"}`}
-          >
-            <Button variant="outline" disabled={!!busy} onClick={() => input.current?.click()} aria-describedby="resume-upload-help">
-              {busy ? <><LoaderCircle className="animate-spin" aria-hidden="true" />Reading résumé…</> : "Choose PDF"}
+      </> : <div className="relative flex min-h-[70svh] flex-1 flex-col items-center justify-center px-6 py-16 text-center">
+        {dragging && <div aria-hidden="true" className="pointer-events-none absolute inset-3 rounded-xl border border-dashed border-foreground/25 bg-muted/40" />}
+        <div className="relative w-full max-w-sm">
+          <h2 className="text-2xl font-semibold tracking-tight">Upload your résumé</h2>
+          <p className="mt-2 text-sm text-muted-foreground">We’ll fill in your profile from it.</p>
+          <div className="mt-8 flex flex-col items-center gap-3">
+            <Button size="lg" disabled={!!busy} onClick={() => input.current?.click()} className="min-w-40">
+              {busy ? <><LoaderCircle className="animate-spin" aria-hidden="true" />Reading…</> : "Choose PDF"}
             </Button>
-            <p id="resume-upload-help" className="text-xs text-muted-foreground">
-              {dragging ? "Drop to upload" : "or drag it here · PDF with selectable text, up to 5 MB"}
-            </p>
+            <p className="text-xs text-muted-foreground">{dragging ? "Release to upload" : "or drop it anywhere · up to 5 MB"}</p>
           </div>
-          <ol className="mt-6 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-            <li className="text-foreground">1. Upload résumé</li>
-            <li aria-hidden="true">→</li>
-            <li>2. Review and answer questions</li>
-            <li aria-hidden="true">→</li>
-            <li>3. Workspace unlocks</li>
-          </ol>
         </div>
       </div>}
-      {error && <p role="alert" className="mx-auto -mt-8 w-full max-w-lg px-4 pb-6 text-sm text-destructive sm:px-0">{error}</p>}
+      {error && <p role="alert" className="mx-auto -mt-12 w-full max-w-sm px-6 pb-8 text-center text-sm text-destructive">{error}</p>}
     </section>
   );
 }
