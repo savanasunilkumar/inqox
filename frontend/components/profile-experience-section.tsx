@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AlertTriangle, Check, Pencil, Plus, Trash2, X } from "lucide-react";
+import { EntityLogo } from "@/components/entity-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -249,6 +250,8 @@ export function ProfileExperienceSection({
               className="group py-4 first:pt-1 last:pb-1"
             >
               <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                <EntityLogo name={item.company} kind="company" />
                 <div className="space-y-0.5">
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-sm font-semibold text-foreground">
@@ -266,6 +269,7 @@ export function ProfileExperienceSection({
                   <p className="text-xs text-muted-foreground tabular-nums">
                     {[item.dateRange, item.location].filter(Boolean).join(" · ")}
                   </p>
+                </div>
                 </div>
 
                 <div className="flex items-center gap-1 opacity-70 transition-opacity group-hover:opacity-100">

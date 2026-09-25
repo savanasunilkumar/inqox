@@ -50,3 +50,26 @@ export function extractBoardLogo(html: string): string | null {
   }
   return null;
 }
+
+export type LogoEntityKind = "company" | "school";
+
+type DomainCandidate = { name: string; domain: string };
+
+const LEGAL_SUFFIX = /\b(?:inc|llc|ltd|limited|corp|corporation|co|company|plc|gmbh|pvt|private)\b\.?/g;
+
+export function normalizeEntityName(name: string): string {
+  return name.toLowerCase().replace(/&/g, "and").replace(LEGAL_SUFFIX, "").replace(/[^a-z0-9]/g, "");
+}
+
+// Only accept a suggestion whose name matches the résumé text, so an unrelated brand's logo is never shown.
+export function pickEntityDomain(query: string, candidates: DomainCandidate[]): string | null {
+  const target = normalizeEntityName(query);
+  if (target.length < 2) return null;
+  const scored = candidates
+    .map(c => ({ domain: c.domain, name: normalizeEntityName(c.name) }))
+    .filter(c => c.name.length >= 2 && domainLogo(c.domain));
+  const exact = scored.find(c => c.name === target);
+  if (exact) return exact.domain;
+  const prefix = scored.find(c => (target.startsWith(c.name) || c.name.startsWith(target)) && Math.min(c.name.length, target.length) >= 4);
+  return prefix?.domain ?? null;
+}

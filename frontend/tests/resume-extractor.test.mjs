@@ -197,3 +197,65 @@ test("handles empty or blank text gracefully", () => {
   assert.equal(result.education.length, 0);
   assert.equal(result.experience.length, 0);
 });
+
+test("separates right-aligned locations joined onto employer and school lines", () => {
+  const resume = `
+Sam Lee
+sam@x.com
+
+EXPERIENCE
+Stripe San Francisco, CA
+Software Engineer Jan 2022 - Present
+• Built payments infrastructure
+Tata Consultancy Services | Hyderabad, India Jun 2018 - Jul 2020
+Systems Engineer
+• Maintained banking apps
+Palo Alto Networks Santa Clara, CA 2017 - 2018
+Security Analyst
+Google LLC, Mountain View, CA
+Product Manager Intern May 2016 - Aug 2016
+
+EDUCATION
+Iowa State University Ames, IA
+Master of Science in Computer Science Aug 2020 - May 2022
+`;
+
+  const result = extractFromResumeText(resume);
+  const roles = result.experience.map(e => [e.company, e.title, e.location]);
+
+  assert.deepEqual(roles, [
+    ["Stripe", "Software Engineer", "San Francisco, CA"],
+    ["Tata Consultancy Services", "Systems Engineer", "Hyderabad, India"],
+    ["Palo Alto Networks", "Security Analyst", "Santa Clara, CA"],
+    ["Google LLC", "Product Manager Intern", "Mountain View, CA"],
+  ]);
+  assert.equal(result.education[0].school, "Iowa State University");
+  assert.equal(result.education[0].graduationDate, "May 2022");
+  assert.ok(result.logs.some(l => l.message.includes('Separated location "Santa Clara, CA"')));
+});
+
+test("keeps company names that end in a suffix or two-letter word", () => {
+  const resume = `
+EXPERIENCE
+Software Engineer | Jan 2020 - Present
+Acme, Co
+• Built things
+`;
+
+  const result = extractFromResumeText(resume);
+  assert.equal(result.experience[0].company, "Acme, Co");
+});
+
+test("ignores job-title keywords inside bullet points when locating the title", () => {
+  const resume = `
+EXPERIENCE
+Data Analyst | Stripe | Jan 2021 - Present
+• Mentored an intern on payments tooling
+Backend Developer | Jan 2019 - Dec 2020
+Square
+`;
+
+  const result = extractFromResumeText(resume);
+  assert.equal(result.experience[1].title, "Backend Developer");
+  assert.equal(result.experience[1].company, "Square");
+});

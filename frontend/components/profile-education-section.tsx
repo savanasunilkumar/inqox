@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AlertTriangle, Check, Pencil, Plus, Trash2, X } from "lucide-react";
+import { EntityLogo } from "@/components/entity-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ExtractedEducation } from "@/lib/profile-model";
@@ -233,6 +234,8 @@ export function ProfileEducationSection({
               className="group py-4 first:pt-1 last:pb-1"
             >
               <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                <EntityLogo name={item.school} kind="school" />
                 <div className="space-y-0.5">
                   <h3 className="text-sm font-semibold text-foreground">
                     {item.degree}{item.major ? ` in ${item.major}` : ""}
@@ -246,6 +249,7 @@ export function ProfileEducationSection({
                       item.gpa ? `GPA: ${item.gpa}` : "",
                     ].filter(Boolean).join(" · ")}
                   </p>
+                </div>
                 </div>
 
                 <div className="flex items-center gap-1 opacity-70 transition-opacity group-hover:opacity-100">
