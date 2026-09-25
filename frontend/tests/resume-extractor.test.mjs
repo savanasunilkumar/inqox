@@ -259,3 +259,36 @@ Square
   assert.equal(result.experience[1].title, "Backend Developer");
   assert.equal(result.experience[1].company, "Square");
 });
+
+test("does not swallow the next dated role after a date-only line", () => {
+  const result = extractFromResumeText(`
+EXPERIENCE
+2018 - 2020
+Software Engineer | 2021 - Present
+Stripe
+`);
+  assert.equal(result.experience.length, 2);
+  assert.equal(result.experience[1].title, "Software Engineer");
+  assert.equal(result.experience[1].dateRange, "2021 - Present");
+});
+
+test("keeps an unbulleted accomplishment as a highlight, not the employer", () => {
+  const result = extractFromResumeText(`
+EXPERIENCE
+Software Engineer | 2022 - Present
+Built payment APIs
+`);
+  assert.notEqual(result.experience[0].company, "Built payment APIs");
+});
+
+test("does not give an unrelated later role the previous employer", () => {
+  const result = extractFromResumeText(`
+EXPERIENCE
+Data Analyst | Acme Corp | 2018 - 2020
+• Built dashboards
+Independent Consultant | 2022 - Present
+• Advised teams
+`);
+  assert.equal(result.experience[0].company, "Acme Corp");
+  assert.notEqual(result.experience[1].company, "Acme Corp");
+});

@@ -643,18 +643,31 @@ function extractExperience(
   const isTitleLine = (line: string) =>
     !!line && JOB_TITLE_KEYWORDS.some(k => line.toLowerCase().includes(k));
 
-  const looksLikeCompanyLine = (line: string) =>
+  // Employer names are short and capitalized ("Stripe", "Bank of America"); sentence-case prose
+  // such as "Built payment APIs" is kept as a highlight instead.
+  const isNameCased = (line: string) => {
+    const words = line.split(/\s+/);
+    return words.length <= 6 && !/[.!?;:]$/.test(line) &&
+      words.every(w => /^[A-Z0-9&(]/.test(w) || /^(?:of|and|the|for|de|la|at|in|&)$/.test(w));
+  };
+
+  const looksLikeCompanyLine = (line: string, idx: number) =>
     !!line &&
     line.length > 1 &&
     line.length < 60 &&
     !/^[-•*·–—]/.test(line) &&
     !dateRangeRegex.test(line) &&
     !/(19|20)\d{2}/.test(line) &&
-    !isTitleLine(line);
+    !isTitleLine(line) &&
+    (COMPANY_SUFFIX_REGEX.test(line) || !!lineLocations[idx] || isNameCased(line));
+
+  const SELF_EMPLOYED = /\b(?:independent|freelance|self[- ]employed|contractor|founder)\b/i;
 
   let currentItem: ExtractedExperience | null = null;
   let lastCompany = "";
+  let lastCompanyWasHeading = false;
   const consumedIndices = new Set<number>();
+  let currentCompanyWasHeading = false;
 
   for (let i = 0; i < linesToScan.length; i++) {
     if (consumedIndices.has(i)) continue;
@@ -666,6 +679,7 @@ function extractExperience(
         items.push(currentItem);
         if (currentItem.company && currentItem.company !== "Company") {
           lastCompany = currentItem.company;
+          lastCompanyWasHeading = currentCompanyWasHeading;
         }
         logs.push({
           category: "company",
@@ -680,8 +694,9 @@ function extractExperience(
       let company = "";
 
       const sameLineWithoutDate = line.replace(dateMatch[0], "").trim();
-      const prevLine1 = i > 0 && !consumedIndices.has(i - 1) ? linesToScan[i - 1].trim() : "";
-      const prevLine2 = i > 1 && !consumedIndices.has(i - 2) ? linesToScan[i - 2].trim() : "";
+      // Earlier lines with their own date range belong to the previous role.
+      const prevLine1 = i > 0 && !consumedIndices.has(i - 1) && !dateRangeRegex.test(linesToScan[i - 1]) ? linesToScan[i - 1].trim() : "";
+      const prevLine2 = prevLine1 && i > 1 && !consumedIndices.has(i - 2) && !dateRangeRegex.test(linesToScan[i - 2]) ? linesToScan[i - 2].trim() : "";
       const nextLine1 = i + 1 < linesToScan.length ? linesToScan[i + 1].trim() : "";
       const nextLine2 = i + 2 < linesToScan.length ? linesToScan[i + 2].trim() : "";
 
@@ -747,21 +762,21 @@ function extractExperience(
       }
 
       // Date-only line: title and/or company may sit on the following lines
-      if (!title && isTitleLine(nextLine1)) {
+      if (!title && isTitleLine(nextLine1) && !dateRangeRegex.test(nextLine1)) {
         title = nextLine1;
         consumedIndices.add(i + 1);
       }
-      if (!company && !consumedIndices.has(i + 1) && looksLikeCompanyLine(nextLine1)) {
+      if (!company && !consumedIndices.has(i + 1) && looksLikeCompanyLine(nextLine1, i + 1)) {
         company = cleanCompanyName(nextLine1);
         consumedIndices.add(i + 1);
       }
-      if (!company && consumedIndices.has(i + 1) && looksLikeCompanyLine(nextLine2)) {
+      if (!company && consumedIndices.has(i + 1) && looksLikeCompanyLine(nextLine2, i + 2)) {
         company = cleanCompanyName(nextLine2);
         consumedIndices.add(i + 2);
       }
 
-      if (!company && lastCompany) {
-        // Consecutive roles at one employer often omit the repeated company line
+      if (!company && lastCompany && lastCompanyWasHeading && !SELF_EMPLOYED.test(title)) {
+        // Roles grouped under one employer heading omit the repeated company line
         company = lastCompany;
         logs.push({
           category: "company",
@@ -769,6 +784,9 @@ function extractExperience(
           sourceLine: line,
         });
       }
+
+      currentCompanyWasHeading = !!company && [prevLine1, prevLine2].some(l => l && !dateRangeRegex.test(l) && cleanCompanyName(l) === company);
+      if (!currentCompanyWasHeading && company && company === lastCompany) currentCompanyWasHeading = lastCompanyWasHeading;
 
       const locationIndex = [i, i + 1, i + 2, i - 1, i - 2].find(idx =>
         idx >= 0 && lineLocations[idx] && (idx >= i ? idx === i || consumedIndices.has(idx) : !consumedIndices.has(idx)),
