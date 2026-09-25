@@ -87,6 +87,109 @@ ACADEMIC PROJECTS
   assert.equal(result.education[0].degree, "Master’s");
 });
 
+test("extracts company on the line after title + dates", () => {
+  const resume = `
+John Doe
+john@x.com
+
+EXPERIENCE
+Software Engineer | Jan 2020 - Present
+Stripe
+• Built payments infra
+
+Senior Developer | 2018 - 2020
+Datadog
+• Monitoring tools
+`;
+
+  const result = extractFromResumeText(resume);
+
+  assert.equal(result.experience.length, 2);
+  assert.equal(result.experience[0].title, "Software Engineer");
+  assert.equal(result.experience[0].company, "Stripe");
+  assert.equal(result.experience[1].company, "Datadog");
+  assert.equal(result.summary.currentCompany, "Stripe");
+});
+
+test("reuses the employer for consecutive roles at the same company", () => {
+  const resume = `
+Jane Doe
+jane@x.com
+
+EXPERIENCE
+Stripe
+Software Engineer | 2022 - Present
+• Built payments
+Software Engineer Intern | Jun 2020 - Sep 2020
+• Internship work
+`;
+
+  const result = extractFromResumeText(resume);
+
+  assert.equal(result.experience.length, 2);
+  assert.equal(result.experience[0].company, "Stripe");
+  assert.equal(result.experience[1].company, "Stripe");
+});
+
+test("strips city and workplace markers from company names", () => {
+  const resume = `
+Sam Roe
+sam@x.com
+
+EXPERIENCE
+Vercel, San Francisco
+Frontend Engineer
+Mar 2021 - Present
+• Web apps
+
+Acme Corp - Remote
+Backend Engineer | 2019 - 2021
+• APIs
+`;
+
+  const result = extractFromResumeText(resume);
+
+  assert.equal(result.experience.length, 2);
+  assert.equal(result.experience[0].company, "Vercel");
+  assert.equal(result.experience[1].company, "Acme Corp");
+});
+
+test("resolves title and company on lines after a date-only line", () => {
+  const resume = `
+Kai Zen
+kai@x.com
+
+EXPERIENCE
+Jan 2021 - Present
+Software Engineer
+Stripe
+• Built things
+`;
+
+  const result = extractFromResumeText(resume);
+
+  assert.equal(result.experience.length, 1);
+  assert.equal(result.experience[0].title, "Software Engineer");
+  assert.equal(result.experience[0].company, "Stripe");
+});
+
+test("detects an internships section as experience", () => {
+  const resume = `
+Rae Io
+rae@x.com
+
+INTERNSHIPS
+Software Engineer Intern | May 2023 - Aug 2023
+Nvidia
+• GPU kernels
+`;
+
+  const result = extractFromResumeText(resume);
+
+  assert.equal(result.hasExperience, true);
+  assert.equal(result.experience[0].company, "Nvidia");
+});
+
 test("handles empty or blank text gracefully", () => {
   const result = extractFromResumeText("");
   assert.equal(result.hasEducation, false);

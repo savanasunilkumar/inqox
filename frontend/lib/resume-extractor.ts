@@ -100,6 +100,8 @@ const JOB_TITLE_KEYWORDS = [
   "project manager", "devops", "sre", "qa", "qa engineer", "full stack", "full-stack",
   "frontend", "backend", "software development engineer", "sde", "sde-1", "sde-2", "sde-3",
   "mts", "member of technical staff", "tech lead", "team lead", "engineering lead", "co-founder", "founder",
+  "assistant", "fellow", "trainee", "working student", "freelance", "freelancer", "instructor",
+  "mentor", "apprentice",
 ];
 
 const COMPANY_SUFFIX_REGEX = /\b(?:inc(?:\.|\b)|llc(?:\.|\b)|corp(?:\.|\b|oration)|ltd(?:\.|\b|imited)|co(?:\.|\b|mpany)|technologies|technology|tech|labs|laboratories|solutions|systems|software|consulting|group|ventures|enterprises|media|interactive|studios|global|health|capital|financial|networks)\b/i;
@@ -299,7 +301,7 @@ function identifySections(lines: string[], logs: ExtractionLogEntry[]): { educat
 
   const isExperienceHeader = (line: string) => {
     const clean = line.replace(/^[#*\-–—|•·\s]+|[#*\-–—|•·:\s]+$/g, "").trim().toLowerCase();
-    return /^(?:(?:work|professional|career|relevant|employment|industry)?\s*experience|employment(?:\s+history)?|work\s+history|experience\s+and\s+projects|professional\s+background)(?:\s*(?:&|and|\/)\s*[a-z\s]+)?$/i.test(clean);
+    return /^(?:(?:work|professional|career|relevant|employment|industry|internship)?\s*experiences?|employment(?:\s+history)?|work\s+history|experience\s+and\s+projects|professional\s+(?:background|history)|career\s+history|internships?|positions?|roles)(?:\s*(?:&|and|\/)\s*[a-z\s]+)?$/i.test(clean);
   };
 
   const isOtherHeader = (line: string) => {
@@ -347,6 +349,14 @@ function cleanCompanyName(raw: string): string {
   name = name.replace(/\s*\(.*?\)\s*$/, "");
   name = name.replace(/,\s*[A-Z]{2}(?:\s+\d{5})?$/i, ""); // Strip ", CA" or ", CA 94105"
   name = name.replace(/,\s*(?:United States|USA|India|Remote|UK|Canada)$/i, "");
+  // Strip workplace-type markers ("Remote", "(Hybrid)", "- On-site")
+  name = name.replace(/[,\s]*\(?(?:remote|hybrid|on-?site|onsite)\)?\.?$/i, "");
+  name = name.replace(/\s*[-–—|•·]\s*$/, "");
+  // Strip a trailing ", City" tail (1-3 capitalized words that aren't a company suffix)
+  const cityTail = name.match(/,\s*([A-Z][a-zA-Z.'-]+(?:\s+[A-Z][a-zA-Z.'-]+){0,2})$/);
+  if (cityTail && !COMPANY_SUFFIX_REGEX.test(cityTail[1])) {
+    name = name.slice(0, cityTail.index).trim();
+  }
   return name.trim();
 }
 
@@ -528,15 +538,36 @@ function extractExperience(
 
   const dateRangeRegex = /\b(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*)?(?:\d{1,2}\/)?(19\d{2}|20\d{2})\s*(?:-|–|—|to)\s*(?:present|current|now|(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*)?(?:\d{1,2}\/)?(19\d{2}|20\d{2}))\b/i;
 
+  const cleanTitle = (value: string) =>
+    value.replace(/^[-–—|•·,/.\s]+|[-–—|•·,/.\s]+$/g, "").trim();
+
+  const isTitleLine = (line: string) =>
+    !!line && JOB_TITLE_KEYWORDS.some(k => line.toLowerCase().includes(k));
+
+  const looksLikeCompanyLine = (line: string) =>
+    !!line &&
+    line.length > 1 &&
+    line.length < 60 &&
+    !/^[-•*·–—]/.test(line) &&
+    !dateRangeRegex.test(line) &&
+    !/(19|20)\d{2}/.test(line) &&
+    !isTitleLine(line);
+
   let currentItem: ExtractedExperience | null = null;
+  let lastCompany = "";
+  const consumedIndices = new Set<number>();
 
   for (let i = 0; i < linesToScan.length; i++) {
+    if (consumedIndices.has(i)) continue;
     const line = linesToScan[i];
     const dateMatch = line.match(dateRangeRegex);
 
     if (dateMatch) {
       if (currentItem && (currentItem.title || currentItem.company)) {
         items.push(currentItem);
+        if (currentItem.company && currentItem.company !== "Company") {
+          lastCompany = currentItem.company;
+        }
         logs.push({
           category: "company",
           message: `Company & role finalized: "${currentItem.company}" — "${currentItem.title}" (${currentItem.dateRange})`,
@@ -550,9 +581,10 @@ function extractExperience(
       let company = "";
 
       const sameLineWithoutDate = line.replace(dateMatch[0], "").trim();
-      const prevLine1 = i > 0 ? linesToScan[i - 1].trim() : "";
-      const prevLine2 = i > 1 ? linesToScan[i - 2].trim() : "";
+      const prevLine1 = i > 0 && !consumedIndices.has(i - 1) ? linesToScan[i - 1].trim() : "";
+      const prevLine2 = i > 1 && !consumedIndices.has(i - 2) ? linesToScan[i - 2].trim() : "";
       const nextLine1 = i + 1 < linesToScan.length ? linesToScan[i + 1].trim() : "";
+      const nextLine2 = i + 2 < linesToScan.length ? linesToScan[i + 2].trim() : "";
 
       // Check if title and company are on the same line
       if (sameLineWithoutDate.length > 3) {
@@ -615,8 +647,32 @@ function extractExperience(
         }
       }
 
+      // Date-only line: title and/or company may sit on the following lines
+      if (!title && isTitleLine(nextLine1)) {
+        title = nextLine1;
+        consumedIndices.add(i + 1);
+      }
+      if (!company && !consumedIndices.has(i + 1) && looksLikeCompanyLine(nextLine1)) {
+        company = cleanCompanyName(nextLine1);
+        consumedIndices.add(i + 1);
+      }
+      if (!company && consumedIndices.has(i + 1) && looksLikeCompanyLine(nextLine2)) {
+        company = cleanCompanyName(nextLine2);
+        consumedIndices.add(i + 2);
+      }
+
+      if (!company && lastCompany) {
+        // Consecutive roles at one employer often omit the repeated company line
+        company = lastCompany;
+        logs.push({
+          category: "company",
+          message: `No company line found near "${title || "role"}"; reused previous employer "${lastCompany}".`,
+          sourceLine: line,
+        });
+      }
+
       currentItem = {
-        title: title || "Role",
+        title: cleanTitle(title) || "Role",
         company: company || "Company",
         dateRange,
         isCurrent,
