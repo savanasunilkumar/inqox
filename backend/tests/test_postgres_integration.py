@@ -485,3 +485,59 @@ async def test_match_jobs_filters_level_country_sponsorship_and_ranks_by_skills(
         remote_only=True,
     )
     assert [item["title"] for item in remote["items"]] == ["Backend Engineer"]
+
+
+async def test_match_jobs_ranks_title_matches_and_backfills_missing_signals(
+    repository: Repository,
+) -> None:
+    jobs = [
+        NormalizedJob(
+            external_id="family",
+            title="Platform Engineer",
+            location="Austin, TX",
+            canonical_url="https://example.com/jobs/family",
+        ),
+        NormalizedJob(
+            external_id="title",
+            title="Software Engineer, Payments",
+            location="Austin, TX",
+            canonical_url="https://example.com/jobs/title",
+        ),
+        NormalizedJob(
+            external_id="staff",
+            title="Staff Software Engineer",
+            location="Austin, TX",
+            canonical_url="https://example.com/jobs/staff",
+        ),
+        NormalizedJob(
+            external_id="sales",
+            title="Account Executive",
+            location="Austin, TX",
+            canonical_url="https://example.com/jobs/sales",
+        ),
+    ]
+    await apply(repository, jobs)
+    # Rows written by a scanner that predates match signals.
+    await repository.pool.execute(
+        "UPDATE jobs SET skills = '{}', role_families = '{}', seniority = NULL, "
+        "countries = '{}', signals_version = NULL"
+    )
+    assert await repository.refresh_signals(only_missing=True, limit=10) == 4
+    assert await repository.refresh_signals(only_missing=True, limit=10) == 0
+
+    page = await repository.match_jobs(
+        skills=[],
+        families=["software"],
+        levels=[1, 2, 3],
+        years=4,
+        country="US",
+        needs_sponsorship=False,
+        remote_only=False,
+        title_patterns=[r"\msoftware[\s-]+engineer\M"],
+    )
+    assert [item["title"] for item in page["items"]] == [
+        "Software Engineer, Payments",
+        "Platform Engineer",
+    ]
+    assert page["items"][0]["match"]["titleMatch"] is True
+    assert page["items"][1]["match"]["titleMatch"] is False

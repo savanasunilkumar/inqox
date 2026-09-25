@@ -14,6 +14,8 @@ from applyit_ingestion.job_signals import (
     min_years_required,
     role_families,
     seniority,
+    title_pattern,
+    title_phrases,
 )
 
 
@@ -88,3 +90,23 @@ def test_hyphenated_and_abbreviated_locations() -> None:
     assert countries("US-Remote") == ["US"]
     assert countries("SA - Riyadh, Saudi Arabia") == ["SA"]
     assert countries("SF") == ["US"]
+
+
+def test_title_phrases_strip_levels_and_team_suffixes() -> None:
+    assert title_phrases(
+        [
+            "Graduate Research Assistant",
+            "Software Development Intern",
+            "Software Engineer (Intern to L2)",
+            "Sr. Data Engineer, Payments",
+            "Senior Engineer",
+        ]
+    ) == [
+        "data developer",
+        "data engineer",
+        "research assistant",
+        "software developer",
+        "software development",
+        "software engineer",
+    ]
+    assert title_pattern("full stack engineer") == r"\mfull[\s-]+stack[\s-]+engineer\M"

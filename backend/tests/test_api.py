@@ -14,6 +14,7 @@ class StubRepository:
     def __init__(self) -> None:
         self.list_args: dict[str, object] | None = None
         self.match_args: dict[str, object] | None = None
+        self.refresh_args: dict[str, object] | None = None
 
     async def list_jobs(self, limit: int, **kwargs: object) -> dict[str, object]:
         self.list_args = {"limit": limit, **kwargs}
@@ -22,6 +23,10 @@ class StubRepository:
     async def match_jobs(self, **kwargs: object) -> dict[str, object]:
         self.match_args = kwargs
         return {"items": [], "nextCursor": None, "hasMore": False}
+
+    async def refresh_signals(self, **kwargs: object) -> int:
+        self.refresh_args = kwargs
+        return 0
 
     async def get_job(self, job_id: int) -> dict[str, object] | None:
         if job_id != 7:
@@ -109,6 +114,7 @@ async def test_match_route_derives_candidate_signals() -> None:
     assert response.status_code == 200
     assert response.json()["profile"] == {
         "skills": ["AWS", "PostgreSQL", "Python"],
+        "titles": ["research assistant", "software developer", "software engineer"],
         "roles": ["software"],
         "levels": [1, 2, 3],
         "country": "US",
@@ -121,7 +127,13 @@ async def test_match_route_derives_candidate_signals() -> None:
         "country": "US",
         "needs_sponsorship": True,
         "remote_only": False,
+        "title_patterns": [
+            r"\mresearch[\s-]+assistant\M",
+            r"\msoftware[\s-]+developer\M",
+            r"\msoftware[\s-]+engineer\M",
+        ],
         "limit": 10,
         "offset": 20,
     }
+    assert repo.refresh_args == {"only_missing": True}
     assert invalid.status_code == 422

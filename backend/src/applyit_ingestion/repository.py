@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 import asyncpg
 
 from .config import Settings
-from .job_signals import SENIORITY_LABELS, JobSignals
+from .job_signals import SENIORITY_LABELS, SIGNALS_VERSION, JobSignals
 from .matching import WatchMatcher
 from .models import NormalizedJob, ReconcileSummary, ScanResult, Source
 from .source_keys import make_source_key
@@ -1092,6 +1092,7 @@ class Repository:
         country: str | None,
         needs_sponsorship: bool,
         remote_only: bool,
+        title_patterns: list[str] | None = None,
         limit: int = 24,
         offset: int = 0,
     ) -> dict[str, Any]:
@@ -1106,7 +1107,10 @@ class Repository:
                      ARRAY(
                        SELECT unnest(j.skills) INTERSECT SELECT unnest($1::text[]) ORDER BY 1
                      ) AS matched_skills,
-                     j.role_families && $2::text[] AS family_match
+                     j.role_families && $2::text[] AS family_match,
+                     EXISTS (
+                       SELECT 1 FROM unnest($10::text[]) AS pattern WHERE j.title ~* pattern
+                     ) AS title_match
               FROM jobs j
               JOIN job_sources s ON s.id = j.source_id
               JOIN companies c ON c.id = s.company_id
@@ -1120,11 +1124,14 @@ class Repository:
                      OR coalesce(j.location, '') ~* '\\m(remote|anywhere)\\M')
             ), scored AS (
               SELECT *,
-                     (CASE WHEN family_match THEN 10 ELSE 0 END)
+                     (CASE WHEN title_match THEN 20 ELSE 0 END)
+                     + (CASE WHEN family_match THEN 10 ELSE 0 END)
                      + 2 * cardinality(matched_skills)
                      + (CASE WHEN seniority IS NOT NULL THEN 1 ELSE 0 END) AS score
               FROM candidates
-              WHERE (cardinality($2::text[]) = 0 AND cardinality($1::text[]) = 0)
+              WHERE (cardinality($2::text[]) = 0 AND cardinality($1::text[]) = 0
+                     AND cardinality($10::text[]) = 0)
+                 OR title_match
                  OR family_match
                  OR (cardinality(role_families) = 0 AND cardinality(matched_skills) >= 3)
                  OR cardinality(matched_skills) >= 5
@@ -1143,6 +1150,7 @@ class Repository:
             remote_only,
             limit + 1,
             offset,
+            title_patterns or [],
         )
         has_more = len(rows) > limit
         items = []
@@ -1153,6 +1161,7 @@ class Repository:
                 "score": row["score"],
                 "skills": list(row["matched_skills"]),
                 "roleMatch": row["family_match"],
+                "titleMatch": row["title_match"],
                 "level": SENIORITY_LABELS[level] if level is not None else None,
             }
             items.append(item)
@@ -1162,18 +1171,24 @@ class Repository:
             "hasMore": has_more,
         }
 
-    async def refresh_signals(self, batch_size: int = 500) -> int:
+    async def refresh_signals(
+        self, batch_size: int = 500, *, only_missing: bool = False, limit: int | None = None
+    ) -> int:
         """Recompute match signals for open jobs from their stored text."""
         refreshed = 0
         last_id = 0
-        while True:
+        while limit is None or refreshed < limit:
+            size = batch_size if limit is None else min(batch_size, limit - refreshed)
             rows = await self.pool.fetch(
                 """
                 SELECT id, title, location, description_text FROM jobs
-                WHERE lifecycle_state = 'open' AND id > $1 ORDER BY id LIMIT $2
+                WHERE lifecycle_state = 'open' AND id > $1
+                  AND (NOT $3::boolean OR signals_version IS NULL)
+                ORDER BY id LIMIT $2
                 """,
                 last_id,
-                batch_size,
+                size,
+                only_missing,
             )
             if not rows:
                 return refreshed
@@ -1191,7 +1206,8 @@ class Repository:
                 UPDATE jobs AS current SET
                   skills = seen.skills, role_families = seen.role_families,
                   seniority = seen.seniority, min_years = seen.min_years,
-                  countries = seen.countries, no_sponsorship = seen.no_sponsorship
+                  countries = seen.countries, no_sponsorship = seen.no_sponsorship,
+                  signals_version = $2
                 FROM jsonb_to_recordset($1::jsonb) AS seen(
                   id bigint, skills text[], role_families text[], seniority smallint,
                   min_years smallint, countries text[], no_sponsorship boolean
@@ -1199,9 +1215,11 @@ class Repository:
                 WHERE current.id = seen.id
                 """,
                 records,
+                SIGNALS_VERSION,
             )
             refreshed += len(rows)
             last_id = rows[-1]["id"]
+        return refreshed
 
     async def get_job(self, job_id: int) -> dict[str, Any] | None:
         row = await self.pool.fetchrow(

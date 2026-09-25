@@ -27,6 +27,7 @@ type View = "matched" | "all";
 
 function matchReason(match: JobMatch): string {
   const parts: string[] = [];
+  if (match.titleMatch) parts.push("Matches your title");
   if (match.skills.length) parts.push(match.skills.slice(0, 3).join(", ") + (match.skills.length > 3 ? ` +${match.skills.length - 3}` : ""));
   else if (match.roleMatch) parts.push("Matches your role");
   if (match.level) parts.push(match.level);
@@ -155,7 +156,7 @@ function JobFeed({ view, before }: { view: View; before: number | null }) {
             <h2 className="font-medium">{status === "error" ? "We couldn’t load the jobs" : view === "matched" ? "No matching roles yet" : "No open roles right now"}</h2>
             <p className="text-sm text-muted-foreground">
               {status === "error" ? "Please try again in a moment." : view === "matched"
-                ? <>Add more experience to your <Link href="/profile" className="underline underline-offset-4">profile</Link>, or browse all jobs.</>
+                ? <>Add more experience to your <Link href="/profile" className="underline underline-offset-4">profile</Link>, or browse <Link href="/job-board?view=all" className="underline underline-offset-4">all jobs</Link>.</>
                 : "Check back soon for new opportunities."}
             </p>
             {status === "error" && <Button variant="outline" onClick={() => startLoad()}>Try again</Button>}

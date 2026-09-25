@@ -18,6 +18,7 @@ export type JobMatch = {
   score: number;
   skills: string[];
   roleMatch: boolean;
+  titleMatch: boolean;
   level: string | null;
 };
 
@@ -43,6 +44,7 @@ function parseMatch(value: unknown): JobMatch | undefined {
     score: match.score,
     skills: Array.isArray(match.skills) ? match.skills.filter((skill): skill is string => typeof skill === "string") : [],
     roleMatch: match.roleMatch === true,
+    titleMatch: match.titleMatch === true,
     level: stringOrNull(match.level),
   };
 }
