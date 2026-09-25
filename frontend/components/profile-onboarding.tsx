@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Combobox, DatePicker } from "@/components/field-pickers";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { OnboardingShell, StepStatus, type RailItem } from "@/components/onboarding-rail";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -25,7 +26,7 @@ type Props = {
 
 const required = new Set<string>(requiredProfileFields);
 const fieldByKey = new Map(profileFields.map(f => [f.key, f]));
-const datalists = { countries: COUNTRIES, states: US_STATES, visas: VISA_TYPES, notice: NOTICE_PERIODS };
+const pickerOptions = { countries: COUNTRIES, states: US_STATES, visas: VISA_TYPES, notice: NOTICE_PERIODS };
 
 function errorFor(key: string, value: string | undefined): string {
   if (!value?.trim()) return " ";
@@ -197,9 +198,6 @@ export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion
         </section>
       </OnboardingShell>
 
-      {Object.entries(datalists).map(([id, values]) => (
-        <datalist key={id} id={`onboarding-${id}`}>{values.map(v => <option key={v} value={v} />)}</datalist>
-      ))}
     </div>
   );
 }
@@ -209,7 +207,7 @@ const ROW_COLUMNS: Record<number, string> = { 1: "", 2: "sm:grid-cols-2", 3: "sm
 function GroupSection({ group, render }: { group: OnboardingGroup; render: (key: string, layout: "stacked" | "question") => React.ReactNode }) {
   return (
     <section className="pb-12">
-      <h3 className="mb-6 flex items-center gap-4 text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+      <h3 className="mb-6 -mr-5 flex items-center gap-4 sm:-mr-8 lg:-mr-12 text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
         {group.title}
         <span aria-hidden="true" className="h-px flex-1 bg-border" />
       </h3>
@@ -280,17 +278,24 @@ function FieldRow({ fieldKey, layout, value, fromResume, error, onChange }: {
         </SelectContent>
       </Select>
     );
+  } else if (field.type === "date" || fieldKey === "graduationDate") {
+    control = (
+      <DatePicker id={id} value={value} onChange={onChange} granularity={field.type === "date" ? "day" : "month"} invalid={!!error} describedBy={describedBy} labelledBy={`${id}-label`} />
+    );
+  } else if (ui.datalist) {
+    control = (
+      <Combobox id={id} value={value} onChange={onChange} options={pickerOptions[ui.datalist]} placeholder={ui.placeholder} allowCustom invalid={!!error} describedBy={describedBy} labelledBy={`${id}-label`} />
+    );
   } else {
     control = (
       <Input
         id={id}
-        type={field.type === "date" ? "date" : field.type === "email" ? "email" : field.type === "tel" ? "tel" : field.type === "url" ? "url" : "text"}
+        type={field.type === "email" ? "email" : field.type === "tel" ? "tel" : field.type === "url" ? "url" : "text"}
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={ui.placeholder}
         autoComplete={ui.autoComplete}
         inputMode={ui.inputMode}
-        list={ui.datalist ? `onboarding-${ui.datalist}` : undefined}
         aria-invalid={!!error || undefined}
         aria-describedby={describedBy}
         aria-required={isRequired || undefined}
@@ -303,6 +308,7 @@ function FieldRow({ fieldKey, layout, value, fromResume, error, onChange }: {
     <div className="flex items-baseline justify-between gap-2">
       <label id={`${id}-label`} htmlFor={segmented ? undefined : id} className="text-[13px] font-medium">
         {field.label.replace(/ answer$/, "")}
+        {isRequired && <span aria-hidden="true" className="ml-0.5 text-destructive">*</span>}
       </label>
       {fromResume && <span className="shrink-0 text-[11px] text-muted-foreground">From résumé</span>}
     </div>

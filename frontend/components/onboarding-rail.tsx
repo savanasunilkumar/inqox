@@ -41,7 +41,7 @@ export function OnboardingShell({ items, activeId, onSelect, completed, total, c
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid min-h-full grid-cols-[minmax(0,1fr)] lg:grid-cols-[248px_minmax(0,1fr)]">
+    <div className="grid min-h-full flex-1 grid-cols-[minmax(0,1fr)] lg:grid-cols-[248px_minmax(0,1fr)]">
       <aside className="min-w-0 border-b lg:border-r lg:border-b-0">
         <div className="px-4 pt-5 pb-3 lg:sticky lg:top-0 lg:px-3 lg:py-8">
           <div className="px-2">
@@ -78,9 +78,7 @@ export function OnboardingShell({ items, activeId, onSelect, completed, total, c
           </nav>
         </div>
       </aside>
-      <div className="min-w-0 px-5 pt-8 sm:px-8 lg:px-12 lg:pt-10">
-        <div className="max-w-[960px]">{children}</div>
-      </div>
+      <div className="flex min-w-0 flex-col px-5 pt-8 sm:px-8 lg:px-12 lg:pt-10">{children}</div>
     </div>
   );
 }
