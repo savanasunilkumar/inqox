@@ -349,3 +349,25 @@ Cipilot - AI Campus Assistant Vertex AI, React Native
 `);
   assert.deepEqual(result.experience[0].highlights, ["Designed reusable React architecture."]);
 });
+
+test("reads home location only from the header, never from bullet prose", () => {
+  const withHeader = extractFromResumeText(`Jane Doe
+Ames, IA | jane@example.com | +1 515 555 1234
+Experience
+Engineer Jan 2020 - Present
+Acme
+- Experience in SQL performance tuning, Azure CI
+`);
+  assert.equal(withHeader.contact.city, "Ames");
+  assert.equal(withHeader.contact.region, "IA");
+  assert.equal(withHeader.contact.country, "United States");
+  const noHeader = extractFromResumeText(`Jane Doe
+jane@example.com | +1 515 555 1234
+Experience
+Engineer Jan 2020 - Present
+Acme
+- Experience in SQL performance tuning, Azure CI
+`);
+  assert.equal(noHeader.contact.city, "");
+  assert.equal(noHeader.contact.region, "");
+});

@@ -18,6 +18,7 @@ type Props = {
   background: React.ReactNode;
   onSave: () => Promise<void>;
   finishHref?: string;
+  linkTiles?: boolean;
 };
 
 const required = new Set<string>(requiredProfileFields);
@@ -35,7 +36,7 @@ function missingIn(step: OnboardingStep, completion: Completion) {
   return step.fields.filter(k => completion.missing.includes(k));
 }
 
-export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion, background, onSave, finishHref = "/job-board" }: Props) {
+export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion, background, onSave, finishHref = "/job-board", linkTiles = true }: Props) {
   const [stepIndex, setStepIndex] = useState(() => {
     const first = onboardingSteps.findIndex(s => missingIn(s, completion).length > 0);
     return first === -1 ? 0 : first;
@@ -100,15 +101,15 @@ export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion
         </p>
         <div className="mt-8 grid w-full grid-cols-2 gap-2 sm:grid-cols-4">
           {[
-            { label: "Dashboard", icon: LayoutDashboard },
-            { label: "Job Board", icon: BriefcaseBusiness },
-            { label: "Inbox", icon: Inbox },
-            { label: "Tracker", icon: Kanban },
-          ].map(({ label, icon: Icon }) => (
-            <div key={label} className="flex flex-col items-center gap-1.5 rounded-xl border bg-card px-3 py-3 text-xs font-medium">
+            { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+            { label: "Job Board", href: "/job-board", icon: BriefcaseBusiness },
+            { label: "Inbox", href: "/inbox", icon: Inbox },
+            { label: "Tracker", href: "/tracker", icon: Kanban },
+          ].map(({ label, href, icon: Icon }) => (
+            <Link key={label} href={linkTiles ? href : "#"} aria-disabled={!linkTiles || undefined} onClick={e => { if (!linkTiles) e.preventDefault(); }} className="flex flex-col items-center gap-1.5 rounded-xl border bg-card px-3 py-3 text-xs font-medium transition-colors outline-none hover:border-primary/40 hover:bg-primary/5 focus-visible:ring-3 focus-visible:ring-ring/50">
               <Icon className="size-4 text-primary" aria-hidden="true" />
               {label}
-            </div>
+            </Link>
           ))}
         </div>
         <div className="mt-8 flex flex-wrap justify-center gap-2">
@@ -153,8 +154,8 @@ export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion
 
       <div className="grid gap-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10">
         {/* Stepper */}
-        <nav aria-label="Profile steps" className="-mx-4 overflow-x-auto px-4 lg:mx-0 lg:overflow-visible lg:px-0">
-          <ol className="flex gap-2 lg:sticky lg:top-4 lg:flex-col lg:gap-1">
+        <nav aria-label="Profile steps" className="-mx-4 overflow-x-auto px-4 [mask-image:linear-gradient(to_right,black_85%,transparent)] [scrollbar-width:none] lg:mx-0 lg:overflow-visible lg:px-0 lg:[mask-image:none] [&::-webkit-scrollbar]:hidden">
+          <ol className="flex gap-2 pr-10 lg:sticky lg:pr-0 lg:top-4 lg:flex-col lg:gap-1">
             {onboardingSteps.map((s, index) => {
               const left = missingIn(s, completion).length;
               const done = left === 0;
@@ -226,11 +227,11 @@ export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion
               <ArrowLeft aria-hidden="true" />Back
             </Button>
             <div className="flex min-w-0 items-center gap-3">
-              <p aria-live="polite" className="hidden min-w-0 truncate text-xs sm:block">
+              <p aria-live="polite" className="min-w-0 truncate text-xs">
                 {saveError ? (
-                  <span className="inline-flex items-center gap-1 text-destructive"><CircleAlert className="size-3.5" aria-hidden="true" />{saveError}</span>
+                  <span role="alert" className="inline-flex items-center gap-1 text-destructive"><CircleAlert className="size-3.5" aria-hidden="true" />{saveError}</span>
                 ) : showErrors && stepMissing.length > 0 ? (
-                  <span className="text-amber-700 dark:text-amber-300">{stepMissing.length} {stepMissing.length === 1 ? "answer needs" : "answers need"} attention</span>
+                  <span className="text-amber-700 dark:text-amber-300">{stepMissing.length} <span className="hidden sm:inline">{stepMissing.length === 1 ? "answer needs" : "answers need"} attention</span><span className="sm:hidden">left</span></span>
                 ) : null}
               </p>
               <Button className="h-9 gap-1.5 px-4" disabled={saving} onClick={() => void next()}>
@@ -240,8 +241,7 @@ export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion
               </Button>
             </div>
           </div>
-          {saveError && <p role="alert" className="mt-2 text-xs text-destructive sm:hidden">{saveError}</p>}
-        </section>
+                  </section>
       </div>
 
       <datalist id="onboarding-countries">{COUNTRIES.map(c => <option key={c} value={c} />)}</datalist>

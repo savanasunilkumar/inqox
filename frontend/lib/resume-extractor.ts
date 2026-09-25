@@ -208,6 +208,8 @@ export function extractFromResumeText(text: string): ResumeExtractionResult {
   };
 }
 
+const US_STATE_NAMES = new Set(["alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut", "delaware", "florida", "georgia", "hawaii", "idaho", "illinois", "indiana", "iowa", "kansas", "kentucky", "louisiana", "maine", "maryland", "massachusetts", "michigan", "minnesota", "mississippi", "missouri", "montana", "nebraska", "nevada", "new hampshire", "new jersey", "new mexico", "new york", "north carolina", "north dakota", "ohio", "oklahoma", "oregon", "pennsylvania", "rhode island", "south carolina", "south dakota", "tennessee", "texas", "utah", "vermont", "virginia", "washington", "west virginia", "wisconsin", "wyoming"]);
+
 function extractContact(fullText: string, lines: string[], logs: ExtractionLogEntry[]): ResumeExtractionResult["contact"] {
   // Email
   const emailMatch = fullText.match(/\b([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})\b/);
@@ -269,11 +271,21 @@ function extractContact(fullText: string, lines: string[], logs: ExtractionLogEn
   let city = "";
   let region = "";
   let country = "";
-  const locMatch = fullText.match(/\b([A-Z][a-zA-Z\s.-]+),\s*([A-Z]{2}|[A-Z][a-zA-Z\s]+)(?:,\s*([A-Z][a-zA-Z\s]+))?\b/);
-  if (locMatch && !/university|college|school|institute/i.test(locMatch[1])) {
-    city = locMatch[1].trim();
-    region = locMatch[2].trim();
-    country = locMatch[3]?.trim() || (region.length === 2 ? "United States" : "");
+  const headerLines = lines.slice(0, 8);
+  const headerEnd = headerLines.findIndex(l => /^(?:summary|profile|objective|experience|education|skills|work experience)\b/i.test(l.trim()));
+  outer: for (const line of headerEnd === -1 ? headerLines : headerLines.slice(0, headerEnd)) {
+    for (const segment of line.split(/\s*[|•·]\s*|\s{3,}/)) {
+      const m = segment.trim().match(/^([A-Z][a-zA-Z.'-]+(?:\s[A-Z][a-zA-Z.'-]+){0,3}),\s*([A-Z]{2}|[A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+){0,2})(?:,\s*([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+){0,2}))?$/);
+      if (!m || /university|college|school|institute/i.test(m[1])) continue;
+      const regionValue = m[2].trim();
+      const isUsState = US_STATE_CODES.has(regionValue) || US_STATE_NAMES.has(regionValue.toLowerCase());
+      if (!isUsState && !m[3] && !new RegExp(`^(?:${LOCATION_REGIONS})$`, "i").test(regionValue)) continue;
+      city = m[1].trim();
+      region = regionValue;
+      country = m[3]?.trim() || (isUsState ? "United States" : "");
+      logs.push({ category: "info", message: `Home location detected in header: ${city}, ${region}${country ? `, ${country}` : ""}`, sourceLine: line });
+      break outer;
+    }
   }
 
   logs.push({ category: "info", message: `Contact detected: ${firstName} ${lastName} (${email || "no email"})` });

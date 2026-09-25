@@ -205,6 +205,7 @@ export function LocalProfilePreview() {
                     completion={completion}
                     onSave={async () => { await new Promise(resolve => setTimeout(resolve, 350)); }}
                     finishHref="/profile"
+                    linkTiles={false}
                     background={<>
                       <ProfileExperienceSection
                         hasExperience={hasExperience}
