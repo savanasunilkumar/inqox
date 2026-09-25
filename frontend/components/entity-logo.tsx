@@ -13,7 +13,7 @@ export function EntityLogo({ name, kind, location }: Props) {
   const initials = name.trim().split(/\s+/).filter(w => /^[A-Za-z0-9]/.test(w)).slice(0, 2).map(w => w[0]).join("").toUpperCase();
 
   return (
-    <span aria-hidden="true" className="relative z-10 flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-background text-[11px] font-semibold text-muted-foreground">
+    <span aria-hidden="true" className="relative z-10 flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-background text-[10px] font-semibold text-muted-foreground">
       <span className={state === "loaded" ? "invisible" : undefined}>{initials || "?"}</span>
       {state !== "failed" && name.trim() && (
         <Image

@@ -1,15 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Briefcase, Calendar, Check, ChevronDown, MapPin, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ChevronRight, MoreHorizontal, Plus } from "lucide-react";
 import { EntityLogo } from "@/components/entity-logo";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { ExtractedExperience } from "@/lib/profile-model";
 
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
-const VISIBLE_HIGHLIGHTS = 3;
 
 function parseMonth(text: string, isEnd: boolean): number | null {
   const value = text.trim().toLowerCase();
@@ -144,250 +146,119 @@ export function ProfileExperienceSection({
 
   function renderForm() {
     return (
-        <div className="space-y-3 rounded-lg border bg-muted/40 p-4">
-          <div className="flex items-center justify-between border-b pb-2">
-            <span className="text-xs font-semibold text-foreground">
-              {editingIndex !== null ? "Edit Position" : "New Position"}
-            </span>
-            <button
-              type="button"
-              onClick={cancelForm}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <X className="size-4" />
-            </button>
+      <div className="space-y-4 p-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-1.5">
+            <Label htmlFor="exp-title" className="text-xs">Title</Label>
+            <Input id="exp-title" placeholder="Senior Software Engineer" value={formTitle} onChange={e => setFormTitle(e.target.value)} autoFocus />
           </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1">
-              <label className="text-[11px] font-medium text-muted-foreground">
-                Job Title <span className="text-destructive">*</span>
-              </label>
-              <Input
-                placeholder="e.g. Senior Software Engineer"
-                value={formTitle}
-                onChange={e => setFormTitle(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[11px] font-medium text-muted-foreground">
-                Company Name <span className="text-destructive">*</span>
-              </label>
-              <Input
-                placeholder="e.g. Stripe, Google, Acme Corp"
-                value={formCompany}
-                onChange={e => setFormCompany(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[11px] font-medium text-muted-foreground">
-                Dates
-              </label>
-              <Input
-                placeholder="e.g. 2021 – Present"
-                value={formDateRange}
-                onChange={e => setFormDateRange(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[11px] font-medium text-muted-foreground">
-                Location (optional)
-              </label>
-              <Input
-                placeholder="e.g. San Francisco, CA or Remote"
-                value={formLocation}
-                onChange={e => setFormLocation(e.target.value)}
-              />
-            </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="exp-company" className="text-xs">Company</Label>
+            <Input id="exp-company" placeholder="Acme Inc." value={formCompany} onChange={e => setFormCompany(e.target.value)} />
           </div>
-
-          <div className="flex items-center gap-2 pt-1">
-            <input
-              type="checkbox"
-              id="isCurrentRole"
-              checked={formIsCurrent}
-              onChange={e => setFormIsCurrent(e.target.checked)}
-              className="size-3.5 rounded border-input text-primary focus:ring-primary"
-            />
-            <label htmlFor="isCurrentRole" className="text-xs text-foreground">
-              Current role
-            </label>
+          <div className="grid gap-1.5">
+            <Label htmlFor="exp-dates" className="text-xs">Dates</Label>
+            <Input id="exp-dates" placeholder="Jan 2021 - Present" value={formDateRange} onChange={e => setFormDateRange(e.target.value)} />
           </div>
-
-          <div className="space-y-1">
-            <label className="text-[11px] font-medium text-muted-foreground">
-              Accomplishments & Responsibilities (one per line)
-            </label>
-            <Textarea
-              placeholder="• Architected backend microservices&#10;• Led team of engineers"
-              value={formHighlights}
-              onChange={e => setFormHighlights(e.target.value)}
-              rows={3}
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-1">
-            <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={cancelForm}>
-              Cancel
-            </Button>
-            <Button size="sm" className="h-8 gap-1 text-xs" onClick={saveItem}>
-              <Check className="size-3.5" />
-              <span>{editingIndex !== null ? "Update" : "Add"}</span>
-            </Button>
+          <div className="grid gap-1.5">
+            <Label htmlFor="exp-location" className="text-xs">Location</Label>
+            <Input id="exp-location" placeholder="San Francisco, CA" value={formLocation} onChange={e => setFormLocation(e.target.value)} />
           </div>
         </div>
+        <div className="flex items-center gap-2">
+          <Checkbox id="exp-current" checked={formIsCurrent} onCheckedChange={v => setFormIsCurrent(v === true)} />
+          <Label htmlFor="exp-current" className="text-xs font-normal">I currently work here</Label>
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="exp-highlights" className="text-xs">Highlights <span className="font-normal text-muted-foreground">one per line</span></Label>
+          <Textarea id="exp-highlights" value={formHighlights} onChange={e => setFormHighlights(e.target.value)} rows={4} />
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={cancelForm}>Cancel</Button>
+          <Button size="sm" onClick={saveItem} disabled={!formTitle.trim() && !formCompany.trim()}>{editingIndex !== null ? "Save" : "Add role"}</Button>
+        </div>
+      </div>
     );
   }
 
   return (
-    <section aria-label="Work Experience" className="space-y-4">
-      {/* Section Header: Open, clean, no box container */}
-      <div className="flex items-baseline justify-between border-b pb-3">
-        <div>
-          <h2 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-            Work Experience
-          </h2>
-          <p className="text-sm font-medium text-foreground">
-            {experienceList.length > 0
-              ? `${experienceList.length} ${experienceList.length === 1 ? "position" : "positions"} found`
-              : "Employment history"}
-          </p>
-        </div>
-
+    <section aria-labelledby="experience-heading">
+      <div className="mb-2 flex items-center justify-between">
+        <h4 id="experience-heading" className="text-xs font-medium text-muted-foreground">
+          Experience{experienceList.length > 0 && <span className="ml-1.5 tabular-nums">{experienceList.length}</span>}
+        </h4>
         {!showAddForm && editingIndex === null && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 gap-1 text-xs text-primary hover:bg-primary/10"
-            onClick={startAdd}
-          >
-            <Plus className="size-3.5" />
-            <span>Add position</span>
+          <Button variant="ghost" size="xs" className="text-muted-foreground" onClick={startAdd}>
+            <Plus aria-hidden="true" />Add role
           </Button>
         )}
       </div>
 
-      {/* Warning if no experience section was detected */}
-      {!hasExperience && experienceList.length === 0 && (
-        <div className="flex items-start gap-3 rounded-lg bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-          <div className="space-y-1">
-            <p className="font-medium">No experience section detected in this résumé</p>
-            <p className="text-amber-800/90 dark:text-amber-300/80">
-              Add your current position or internships so employers have your background.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {showAddForm && renderForm()}
-
-      {experienceList.length > 0 && (
-        <ol className="relative">
-          {experienceList.map((item, index) => {
-            if (editingIndex === index) {
-              return <li key={index} className="py-2">{renderForm()}</li>;
-            }
-            const dateRange = item.isCurrent && item.dateRange
-              ? `${item.dateRange.split(/\s*(?:-|–|—|\bto\b)\s*/i)[0]} - Present`
-              : item.dateRange;
-            const duration = dateRange ? formatDuration(dateRange) : "";
-            const highlights = item.highlights ?? [];
-            const isExpanded = expanded.has(index);
-            const visible = isExpanded ? highlights : highlights.slice(0, VISIBLE_HIGHLIGHTS);
-            const isLast = index === experienceList.length - 1;
-            return (
-              <li key={index} className="group relative flex gap-4 pb-6 last:pb-0">
-                {!isLast && (
-                  <span aria-hidden="true" className="absolute top-11 bottom-1 left-[17px] w-px bg-border" />
-                )}
-                <EntityLogo name={item.company} kind="company" location={item.location} />
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 space-y-0.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-sm leading-tight font-semibold text-foreground">{item.title}</h3>
-                        {item.isCurrent && (
-                          <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
-                            Current
-                          </span>
-                        )}
-                      </div>
-                      <p className="flex items-center gap-1.5 text-[13px] text-foreground/80">
-                        <Briefcase aria-hidden="true" className="size-3 shrink-0 text-muted-foreground" />
-                        <span className="truncate" title={item.company}>{item.company}</span>
-                      </p>
-                      {(item.dateRange || item.location) && (
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 pt-0.5 text-xs text-muted-foreground">
-                          {item.dateRange && (
-                            <span className="inline-flex items-center gap-1 tabular-nums">
-                              <Calendar aria-hidden="true" className="size-3" />
-                              {dateRange}
-                              {duration && <span className="text-muted-foreground/70">· {duration}</span>}
-                            </span>
-                          )}
-                          {item.location && (
-                            <span className="inline-flex items-center gap-1">
-                              <MapPin aria-hidden="true" className="size-3" />
-                              {item.location}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex shrink-0 items-center gap-0.5 opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-7"
-                        onClick={() => startEdit(index)}
-                        aria-label={`Edit ${item.title} at ${item.company}`}
-                        title="Edit role"
-                      >
-                        <Pencil className="size-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-7 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => removeItem(index)}
-                        aria-label={`Delete ${item.title} at ${item.company}`}
-                        title="Delete role"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {visible.length > 0 && (
-                    <ul className="mt-2.5 list-disc space-y-1.5 pl-4 text-[13px] leading-relaxed text-foreground/85 marker:text-muted-foreground/60">
-                      {visible.map((bullet, bIdx) => (
-                        <li key={bIdx}>{bullet}</li>
+      <div className="divide-y rounded-lg border bg-card">
+        {showAddForm && renderForm()}
+        {!hasExperience && experienceList.length === 0 && !showAddForm && (
+          <p className="px-4 py-6 text-sm text-muted-foreground">No experience found in your résumé. Add your most recent role.</p>
+        )}
+        {experienceList.map((item, index) => {
+          if (editingIndex === index) return <div key={index}>{renderForm()}</div>;
+          const dateRange = item.isCurrent && item.dateRange
+            ? `${item.dateRange.split(/\s*(?:-|–|—|\bto\b)\s*/i)[0]} - Present`
+            : item.dateRange;
+          const duration = dateRange ? formatDuration(dateRange) : "";
+          const highlights = item.highlights ?? [];
+          const isExpanded = expanded.has(index);
+          const meta = [item.company, dateRange && (duration ? `${dateRange} (${duration})` : dateRange), item.location].filter(Boolean);
+          return (
+            <div key={index} className="flex gap-3 px-4 py-3">
+              <EntityLogo name={item.company} kind="company" location={item.location} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-medium">
+                      {item.title}
+                      {item.isCurrent && <span className="ml-2 text-xs font-normal text-muted-foreground">Current</span>}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {meta.map((part, i) => (
+                        <span key={i}>{i > 0 && <span className="px-1.5 text-muted-foreground/50">·</span>}<span className={i === 0 ? "text-foreground/80" : "tabular-nums"}>{part}</span></span>
                       ))}
-                    </ul>
-                  )}
-                  {highlights.length > VISIBLE_HIGHLIGHTS && (
+                    </p>
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon-xs" className="-mr-1 text-muted-foreground" aria-label={`Actions for ${item.title} at ${item.company}`}>
+                        <MoreHorizontal />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-36">
+                      <DropdownMenuItem onSelect={() => startEdit(index)}>Edit</DropdownMenuItem>
+                      <DropdownMenuItem variant="destructive" onSelect={() => removeItem(index)}>Delete</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+                {highlights.length > 0 && (
+                  <>
                     <button
                       type="button"
                       onClick={() => toggleExpanded(index)}
                       aria-expanded={isExpanded}
-                      className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                      className="mt-1.5 inline-flex items-center gap-1 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
                     >
-                      {isExpanded ? "Show less" : `Show ${highlights.length - VISIBLE_HIGHLIGHTS} more`}
-                      <ChevronDown aria-hidden="true" className={`size-3 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                      <ChevronRight aria-hidden="true" className={`size-3 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                      {highlights.length} {highlights.length === 1 ? "highlight" : "highlights"}
                     </button>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ol>
-      )}
+                    {isExpanded && (
+                      <ul className="mt-2 list-disc space-y-1 pl-4 text-[13px] leading-relaxed text-foreground/80 marker:text-muted-foreground/50">
+                        {highlights.map((bullet, bIdx) => <li key={bIdx}>{bullet}</li>)}
+                      </ul>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </section>
   );
 }

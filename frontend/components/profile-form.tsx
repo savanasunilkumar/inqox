@@ -230,7 +230,6 @@ function ProfileFormContent({
         }}
       />
 
-      {/* Summary Header: No sparkles, flat tabs, log toggle */}
       <ProfileSummaryHeader
         resumeName={profile.resume.name}
         resumeSize={profile.resume.size}
@@ -254,7 +253,7 @@ function ProfileFormContent({
       {activeTab === "extracted" ? (
         <div className="flex-1">
           {showLogs && (
-            <div className="mx-auto w-full max-w-5xl px-4 pt-6 sm:px-8">
+            <div className="mx-auto w-full max-w-3xl px-4 pt-6 sm:px-6">
               <ProfileExtractionLogs
                 logs={extractionResult?.logs || []}
                 institutions={detectedInstitutions}

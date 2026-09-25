@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, BriefcaseBusiness, Check, CircleAlert, Inbox, Kanban, LayoutDashboard, LoaderCircle, LockKeyholeOpen, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { profileFields } from "@/lib/profile-model";
 import { profileCompletion, requiredProfileFields } from "@/lib/profile-completion";
-import { COUNTRIES, US_STATES, fieldUi, onboardingSteps, type OnboardingStep } from "@/lib/onboarding-steps";
+import { COUNTRIES, NOTICE_PERIODS, US_STATES, VISA_TYPES, fieldUi, onboardingSteps, type OnboardingStep } from "@/lib/onboarding-steps";
 
 type Completion = ReturnType<typeof profileCompletion>;
 type Props = {
@@ -18,14 +21,14 @@ type Props = {
   background: React.ReactNode;
   onSave: () => Promise<void>;
   finishHref?: string;
-  linkTiles?: boolean;
 };
 
 const required = new Set<string>(requiredProfileFields);
 const fieldByKey = new Map(profileFields.map(f => [f.key, f]));
+const datalists = { countries: COUNTRIES, states: US_STATES, visas: VISA_TYPES, notice: NOTICE_PERIODS };
 
 function errorFor(key: string, value: string | undefined): string {
-  if (!value?.trim()) return "This is required";
+  if (!value?.trim()) return "Required";
   if (key === "email") return "Enter a valid email address";
   if (key === "yearsExperience") return "Enter a number, like 3";
   if (key === "availableDate") return "Pick a date";
@@ -36,7 +39,28 @@ function missingIn(step: OnboardingStep, completion: Completion) {
   return step.fields.filter(k => completion.missing.includes(k));
 }
 
-export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion, background, onSave, finishHref = "/job-board", linkTiles = true }: Props) {
+function StepStatus({ done, fraction, active }: { done: boolean; fraction: number; active: boolean }) {
+  if (done) {
+    return (
+      <svg viewBox="0 0 14 14" className="size-3.5 shrink-0 text-primary" aria-hidden="true">
+        <circle cx="7" cy="7" r="7" fill="currentColor" />
+        <path d="M4.2 7.2 6 9l3.8-3.8" fill="none" stroke="var(--background)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  const r = 3.5;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg viewBox="0 0 14 14" className={`size-3.5 shrink-0 ${active ? "text-foreground" : "text-muted-foreground"}`} aria-hidden="true">
+      <circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" strokeWidth="1.5" opacity={fraction > 0 ? 1 : 0.6} strokeDasharray={fraction > 0 ? undefined : "2 1.6"} />
+      {fraction > 0 && (
+        <circle cx="7" cy="7" r={r} fill="none" stroke="currentColor" strokeWidth={r * 2} strokeDasharray={`${c * fraction} ${c}`} transform="rotate(-90 7 7)" />
+      )}
+    </svg>
+  );
+}
+
+export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion, background, onSave, finishHref = "/job-board" }: Props) {
   const [stepIndex, setStepIndex] = useState(() => {
     const first = onboardingSteps.findIndex(s => missingIn(s, completion).length > 0);
     return first === -1 ? 0 : first;
@@ -46,15 +70,26 @@ export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion
   const [saveError, setSaveError] = useState("");
   const [finished, setFinished] = useState(false);
   const top = useRef<HTMLDivElement>(null);
+  const nextRef = useRef<() => Promise<void>>(async () => {});
 
   const step = onboardingSteps[stepIndex];
   const stepMissing = missingIn(step, completion);
-  const requiredLeft = completion.missing.length;
-  const percent = Math.round((completion.completed / completion.total) * 100);
+  const isLast = stepIndex === onboardingSteps.length - 1;
 
   useEffect(() => {
-    top.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    top.current?.scrollIntoView({ block: "start" });
   }, [stepIndex, finished]);
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        void nextRef.current();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   function goTo(index: number) {
     setSaveError("");
@@ -62,6 +97,7 @@ export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion
   }
 
   async function next() {
+    if (saving) return;
     setAttempted(prev => new Set(prev).add(step.id));
     if (stepMissing.length > 0) {
       document.getElementById(`field-${stepMissing[0]}`)?.focus();
@@ -72,12 +108,12 @@ export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion
     try {
       await onSave();
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Couldn’t save your answers. Please try again.");
+      setSaveError(err instanceof Error ? err.message : "Couldn’t save your answers. Try again.");
       setSaving(false);
       return;
     }
     setSaving(false);
-    if (stepIndex < onboardingSteps.length - 1) {
+    if (!isLast) {
       goTo(stepIndex + 1);
       return;
     }
@@ -88,37 +124,19 @@ export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion
       goTo(firstIncomplete);
     }
   }
+  useEffect(() => { nextRef.current = next; });
 
   if (finished && completion.complete) {
     return (
-      <div ref={top} className="mx-auto flex w-full max-w-xl flex-col items-center px-6 py-16 text-center">
-        <span className="flex size-14 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 ring-8 ring-emerald-500/5 dark:text-emerald-400">
-          <LockKeyholeOpen className="size-6" aria-hidden="true" />
-        </span>
-        <h2 className="mt-6 text-2xl font-semibold tracking-tight">Your workspace is unlocked</h2>
-        <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
-          Your profile has everything a typical US job application asks for. You can update any answer here at any time.
+      <div ref={top} className="mx-auto w-full max-w-2xl scroll-mt-4 px-4 py-16 sm:px-6">
+        <StepStatus done fraction={1} active />
+        <h2 className="mt-4 text-lg font-semibold tracking-tight">Profile complete</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Dashboard, Job Board, Inbox and Tracker are now unlocked. You can change any answer here later.
         </p>
-        <div className="mt-8 grid w-full grid-cols-2 gap-2 sm:grid-cols-4">
-          {[
-            { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-            { label: "Job Board", href: "/job-board", icon: BriefcaseBusiness },
-            { label: "Inbox", href: "/inbox", icon: Inbox },
-            { label: "Tracker", href: "/tracker", icon: Kanban },
-          ].map(({ label, href, icon: Icon }) => (
-            <Link key={label} href={linkTiles ? href : "#"} aria-disabled={!linkTiles || undefined} onClick={e => { if (!linkTiles) e.preventDefault(); }} className="flex flex-col items-center gap-1.5 rounded-xl border bg-card px-3 py-3 text-xs font-medium transition-colors outline-none hover:border-primary/40 hover:bg-primary/5 focus-visible:ring-3 focus-visible:ring-ring/50">
-              <Icon className="size-4 text-primary" aria-hidden="true" />
-              {label}
-            </Link>
-          ))}
-        </div>
-        <div className="mt-8 flex flex-wrap justify-center gap-2">
-          <Button asChild className="h-10 gap-2 px-5">
-            <Link href={finishHref}>Explore the Job Board<ArrowRight aria-hidden="true" /></Link>
-          </Button>
-          <Button variant="ghost" className="h-10 px-4" onClick={() => { setFinished(false); goTo(0); }}>
-            Review profile
-          </Button>
+        <div className="mt-6 flex gap-2">
+          <Button asChild><Link href={finishHref}>Go to Job Board</Link></Button>
+          <Button variant="ghost" onClick={() => { setFinished(false); goTo(0); }}>Review answers</Button>
         </div>
       </div>
     );
@@ -127,237 +145,191 @@ export function ProfileOnboarding({ fields, onFieldChange, prefilled, completion
   const showErrors = attempted.has(step.id);
 
   return (
-    <div ref={top} className="mx-auto w-full max-w-5xl scroll-mt-4 px-4 py-6 sm:px-8 sm:py-8">
-      {/* Progress summary */}
-      <div className="mb-6 rounded-2xl border bg-card p-4 sm:p-5">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-xs font-medium text-muted-foreground">
-              Step {stepIndex + 1} of {onboardingSteps.length}
-            </p>
-            <h2 className="text-base font-semibold tracking-tight sm:text-lg">
-              {completion.complete ? "Profile complete" : "Finish your profile to unlock your workspace"}
-            </h2>
-          </div>
-          <p className="text-xs text-muted-foreground tabular-nums">
-            {completion.complete ? (
-              <span className="inline-flex items-center gap-1 font-medium text-emerald-600 dark:text-emerald-400"><Check className="size-3.5" aria-hidden="true" />All required answers done</span>
-            ) : (
-              <><span className="font-semibold text-foreground">{requiredLeft}</span> required {requiredLeft === 1 ? "answer" : "answers"} left · {percent}%</>
-            )}
+    <div ref={top} className="mx-auto w-full max-w-3xl scroll-mt-4 px-4 pt-8 pb-4 sm:px-6 lg:pt-10">
+      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold tracking-tight">{completion.complete ? "Your profile" : "Set up your profile"}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {completion.complete
+              ? "Everything a typical US application asks for is filled in."
+              : "Answer the remaining questions to unlock Job Board, Inbox and Tracker."}
           </p>
         </div>
-        <div role="progressbar" aria-label="Profile completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
-          <div className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out" style={{ width: `${percent}%` }} />
+        <div className="flex items-center gap-3 text-xs text-muted-foreground tabular-nums">
+          <span><span className="text-foreground">{completion.completed}</span> / {completion.total}</span>
+          <Progress value={(completion.completed / completion.total) * 100} aria-label="Required answers completed" className="w-24" />
         </div>
-      </div>
+      </header>
 
-      <div className="grid gap-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10">
-        {/* Stepper */}
-        <nav aria-label="Profile steps" className="-mx-4 overflow-x-auto px-4 [mask-image:linear-gradient(to_right,black_85%,transparent)] [scrollbar-width:none] lg:mx-0 lg:overflow-visible lg:px-0 lg:[mask-image:none] [&::-webkit-scrollbar]:hidden">
-          <ol className="flex gap-2 pr-10 lg:sticky lg:pr-0 lg:top-4 lg:flex-col lg:gap-1">
-            {onboardingSteps.map((s, index) => {
-              const left = missingIn(s, completion).length;
-              const done = left === 0;
-              const active = index === stepIndex;
-              const Icon = s.icon;
-              return (
-                <li key={s.id} className="shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => goTo(index)}
-                    aria-current={active ? "step" : undefined}
-                    className={`group flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13px] transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 ${active ? "bg-primary/10 font-medium text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
-                  >
-                    <span className={`flex size-6 shrink-0 items-center justify-center rounded-full border text-[11px] transition-colors ${done && !s.optional ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : active ? "border-primary/30 bg-background text-primary" : "bg-background"}`}>
-                      {done && !s.optional ? <Check className="size-3.5" aria-hidden="true" /> : <Icon className="size-3.5" aria-hidden="true" />}
-                    </span>
-                    <span className="whitespace-nowrap lg:whitespace-normal">
-                      <span className="lg:hidden">{s.short}</span>
-                      <span className="hidden lg:inline">{s.title}</span>
-                    </span>
-                    {s.optional ? (
-                      <span className="ml-auto hidden text-[10px] text-muted-foreground lg:inline">Optional</span>
-                    ) : left > 0 ? (
-                      <span className="ml-auto rounded-full bg-amber-500/15 px-1.5 text-[10px] font-semibold text-amber-700 tabular-nums dark:text-amber-300" aria-label={`${left} required left`}>{left}</span>
-                    ) : null}
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-        </nav>
+      <nav aria-label="Profile steps" className="mt-6 -mx-4 overflow-x-auto border-b px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
+        <ol className="flex gap-5">
+          {onboardingSteps.map((s, index) => {
+            const left = missingIn(s, completion).length;
+            const requiredCount = s.fields.filter(f => required.has(f)).length;
+            const active = index === stepIndex;
+            const done = s.optional ? s.fields.some(f => fields[f]) : left === 0;
+            return (
+              <li key={s.id} className="shrink-0">
+                <button
+                  type="button"
+                  onClick={() => goTo(index)}
+                  aria-current={active ? "step" : undefined}
+                  className={`-mb-px flex h-9 items-center gap-2 border-b-2 text-[13px] transition-colors outline-none focus-visible:text-foreground ${active ? "border-foreground font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                >
+                  <StepStatus done={done} active={active} fraction={requiredCount ? (requiredCount - left) / requiredCount : 0} />
+                  {s.short}
+                  {!s.optional && left > 0 && <span className="text-xs text-muted-foreground tabular-nums" aria-label={`${left} required left`}>{left}</span>}
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      </nav>
 
-        {/* Step content */}
-        <section aria-labelledby={`step-${step.id}`} className="min-w-0">
-          <header className="mb-6 flex items-start gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <step.icon className="size-5" aria-hidden="true" />
-            </span>
-            <div className="min-w-0">
-              <h3 id={`step-${step.id}`} className="flex flex-wrap items-center gap-2 text-lg font-semibold tracking-tight">
-                {step.title}
-                {step.optional && <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">Optional</span>}
-              </h3>
-              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{step.description}</p>
+      <section aria-labelledby={`step-${step.id}`} className="mt-8">
+        <div className="mb-6">
+          <h3 id={`step-${step.id}`} className="text-[15px] font-medium">
+            {step.title}
+            {step.optional && <span className="ml-2 text-xs font-normal text-muted-foreground">Optional</span>}
+          </h3>
+          <p className="mt-0.5 text-sm text-muted-foreground">{step.description}</p>
+        </div>
+
+        {step.id === "background" && <div className="mb-10 space-y-10">{background}</div>}
+
+        <div className="space-y-8">
+          {step.groups.map(group => (
+            <div key={group.title}>
+              <h4 className="mb-2 text-xs font-medium text-muted-foreground">{group.title}</h4>
+              <div className="divide-y rounded-lg border bg-card">
+                {group.fields.map(key => (
+                  <FieldRow
+                    key={key}
+                    fieldKey={key}
+                    value={fields[key] ?? ""}
+                    fromResume={!!prefilled[key] && prefilled[key] === fields[key]}
+                    error={showErrors && completion.missing.includes(key) ? errorFor(key, fields[key]) : ""}
+                    onChange={value => onFieldChange(key, value)}
+                  />
+                ))}
+              </div>
             </div>
-          </header>
+          ))}
+        </div>
 
-          {step.id === "background" && <div className="mb-8 space-y-10">{background}</div>}
-
-          {step.id === "background" && (
-            <h4 className="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase">Used to answer application questions</h4>
-          )}
-          <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
-            {step.fields.map(key => (
-              <FieldControl
-                key={key}
-                fieldKey={key}
-                value={fields[key] ?? ""}
-                fromResume={!!prefilled[key] && prefilled[key] === fields[key]}
-                error={showErrors && completion.missing.includes(key) ? errorFor(key, fields[key]) : ""}
-                onChange={value => onFieldChange(key, value)}
-              />
-            ))}
-          </div>
-
-          {/* Step actions */}
-          <div className="sticky bottom-0 z-20 -mx-4 mt-8 flex items-center justify-between gap-3 border-t bg-background/90 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-b-xl sm:px-0">
-            <Button variant="ghost" className="h-9 gap-1.5" disabled={stepIndex === 0 || saving} onClick={() => goTo(stepIndex - 1)}>
-              <ArrowLeft aria-hidden="true" />Back
+        <div className="sticky bottom-0 z-20 -mx-4 mt-8 flex items-center justify-between gap-3 border-t bg-background px-4 py-3 sm:mx-0 sm:px-0">
+          <Button variant="ghost" disabled={stepIndex === 0 || saving} onClick={() => goTo(stepIndex - 1)}>Back</Button>
+          <div className="flex min-w-0 items-center gap-3">
+            <p aria-live="polite" className="min-w-0 truncate text-xs">
+              {saveError ? (
+                <span role="alert" className="text-destructive">{saveError}</span>
+              ) : showErrors && stepMissing.length > 0 ? (
+                <span className="text-muted-foreground">{stepMissing.length} required {stepMissing.length === 1 ? "answer" : "answers"} left</span>
+              ) : null}
+            </p>
+            <Button disabled={saving} onClick={() => void next()} className="gap-2">
+              {saving ? "Saving…" : isLast ? "Finish" : "Continue"}
+              <KbdGroup className="hidden sm:inline-flex">
+                <Kbd className="bg-primary-foreground/15 text-primary-foreground">⌘</Kbd>
+                <Kbd className="bg-primary-foreground/15 text-primary-foreground">↵</Kbd>
+              </KbdGroup>
             </Button>
-            <div className="flex min-w-0 items-center gap-3">
-              <p aria-live="polite" className="min-w-0 truncate text-xs">
-                {saveError ? (
-                  <span role="alert" className="inline-flex items-center gap-1 text-destructive"><CircleAlert className="size-3.5" aria-hidden="true" />{saveError}</span>
-                ) : showErrors && stepMissing.length > 0 ? (
-                  <span className="text-amber-700 dark:text-amber-300">{stepMissing.length} <span className="hidden sm:inline">{stepMissing.length === 1 ? "answer needs" : "answers need"} attention</span><span className="sm:hidden">left</span></span>
-                ) : null}
-              </p>
-              <Button className="h-9 gap-1.5 px-4" disabled={saving} onClick={() => void next()}>
-                {saving ? <><LoaderCircle className="animate-spin" aria-hidden="true" />Saving…</> : (
-                  <>{stepIndex === onboardingSteps.length - 1 ? (step.optional && stepMissing.length === 0 ? "Save & finish" : "Finish") : "Save & continue"}<ArrowRight aria-hidden="true" /></>
-                )}
-              </Button>
-            </div>
           </div>
-                  </section>
-      </div>
+        </div>
+      </section>
 
-      <datalist id="onboarding-countries">{COUNTRIES.map(c => <option key={c} value={c} />)}</datalist>
-      <datalist id="onboarding-states">{US_STATES.map(s => <option key={s} value={s} />)}</datalist>
+      {Object.entries(datalists).map(([id, values]) => (
+        <datalist key={id} id={`onboarding-${id}`}>{values.map(v => <option key={v} value={v} />)}</datalist>
+      ))}
     </div>
   );
 }
 
-function FieldControl({ fieldKey, value, fromResume, error, onChange }: {
+function FieldRow({ fieldKey, value, fromResume, error, onChange }: {
   fieldKey: string; value: string; fromResume: boolean; error: string; onChange: (value: string) => void;
 }) {
   const field = fieldByKey.get(fieldKey);
   if (!field) return null;
   const ui = fieldUi[fieldKey] ?? {};
   const id = `field-${fieldKey}`;
-  const describedBy = [error && `${id}-error`, field.hint && `${id}-hint`].filter(Boolean).join(" ") || undefined;
   const isRequired = required.has(fieldKey);
-  const options = field.options ?? ui.choices;
-  const wide = ui.wide || (ui.choices && ui.choices.length > 4);
-
-  const label = (
-    <div className="flex items-center justify-between gap-2">
-      <label htmlFor={options ? undefined : id} id={`${id}-label`} className="text-[13px] font-medium text-foreground">
-        {field.label}
-        {isRequired ? <span className="ml-0.5 text-destructive" aria-hidden="true">*</span> : null}
-      </label>
-      {fromResume ? (
-        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary" title="Filled in from your résumé">
-          <Sparkles className="size-3" aria-hidden="true" />From résumé
-        </span>
-      ) : !isRequired ? (
-        <span className="text-[11px] text-muted-foreground">Optional</span>
-      ) : null}
-    </div>
-  );
+  const options = field.options ?? ui.options;
+  const describedBy = [error && `${id}-error`, field.hint && `${id}-hint`].filter(Boolean).join(" ") || undefined;
+  const segmented = options && options.length <= 4 && options.every(o => o.length <= 9);
 
   let control: React.ReactNode;
-  if (options) {
-    const vertical = options.length > 4 || options.some(o => o.length > 14);
+  if (options && segmented) {
     control = (
-      <div
-        role="radiogroup"
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        size="sm"
+        spacing={0}
+        value={value}
+        onValueChange={v => { if (v || !isRequired) onChange(v); }}
         aria-labelledby={`${id}-label`}
         aria-describedby={describedBy}
         aria-invalid={!!error || undefined}
-        className={vertical ? "grid gap-2 sm:grid-cols-2" : "flex flex-wrap gap-2"}
+        className={`w-full sm:w-auto ${error ? "rounded-lg ring-1 ring-destructive/60" : ""}`}
       >
-        {options.map((option, idx) => {
-          const selected = value === option;
-          return (
-            <button
-              key={option}
-              id={idx === 0 ? id : undefined}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              onClick={() => onChange(selected && !isRequired ? "" : option)}
-              className={`flex min-h-9 items-center gap-2 rounded-lg border px-3 py-1.5 text-left text-[13px] transition-all outline-none focus-visible:ring-3 focus-visible:ring-ring/50 ${vertical ? "" : "min-w-20 justify-center"} ${selected ? "border-primary bg-primary/10 font-medium text-foreground shadow-xs" : "bg-card text-foreground/80 hover:border-foreground/20 hover:bg-muted"} ${error && !selected ? "border-destructive/50" : ""}`}
-            >
-              {vertical && (
-                <span className={`flex size-4 shrink-0 items-center justify-center rounded-full border ${selected ? "border-primary bg-primary text-primary-foreground" : "bg-background"}`}>
-                  {selected && <Check className="size-2.5" strokeWidth={3} aria-hidden="true" />}
-                </span>
-              )}
-              {option}
-            </button>
-          );
-        })}
-      </div>
+        {options.map((option, index) => (
+          <ToggleGroupItem
+            key={option}
+            id={index === 0 ? id : undefined}
+            value={option}
+            className="flex-1 px-3 data-[state=on]:bg-foreground data-[state=on]:text-background sm:flex-none"
+          >
+            {option}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+    );
+  } else if (options) {
+    const items = value && !options.includes(value) ? [value, ...options] : options;
+    control = (
+      <Select value={value || undefined} onValueChange={onChange}>
+        <SelectTrigger id={id} aria-labelledby={`${id}-label`} aria-describedby={describedBy} aria-invalid={!!error || undefined} className="w-full">
+          <SelectValue placeholder="Select…" />
+        </SelectTrigger>
+        <SelectContent position="popper" align="end">
+          {items.map(option => <SelectItem key={option} value={option}>{option}</SelectItem>)}
+        </SelectContent>
+      </Select>
     );
   } else {
     control = (
-      <>
-        <Input
-          id={id}
-          type={field.type === "date" ? "date" : field.type === "email" ? "email" : field.type === "tel" ? "tel" : field.type === "url" ? "url" : "text"}
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder={ui.placeholder}
-          autoComplete={ui.autoComplete}
-          inputMode={ui.inputMode}
-          list={ui.datalist ? `onboarding-${ui.datalist}` : undefined}
-          aria-invalid={!!error || undefined}
-          aria-describedby={describedBy}
-          aria-required={isRequired || undefined}
-          className="h-10 rounded-lg bg-card px-3"
-        />
-        {ui.suggestions && (
-          <div className="flex flex-wrap gap-1.5">
-            {ui.suggestions.map(s => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => onChange(s)}
-                aria-pressed={value === s}
-                className={`rounded-full border px-2.5 py-0.5 text-[11px] transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 ${value === s ? "border-primary/40 bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        )}
-      </>
+      <Input
+        id={id}
+        type={field.type === "date" ? "date" : field.type === "email" ? "email" : field.type === "tel" ? "tel" : field.type === "url" ? "url" : "text"}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={ui.placeholder}
+        autoComplete={ui.autoComplete}
+        inputMode={ui.inputMode}
+        list={ui.datalist ? `onboarding-${ui.datalist}` : undefined}
+        aria-invalid={!!error || undefined}
+        aria-describedby={describedBy}
+        aria-required={isRequired || undefined}
+      />
     );
   }
 
   return (
-    <div className={`space-y-2 ${wide ? "sm:col-span-2" : ""}`}>
-      {label}
+    <div className="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_18rem] sm:items-center sm:gap-6">
+      <div className="min-w-0">
+        <label id={`${id}-label`} htmlFor={segmented ? undefined : id} className="text-[13px] font-medium">
+          {field.label.replace(/ answer$/, "")}
+        </label>
+        {(fromResume || !isRequired) && (
+          <span className="ml-2 text-xs text-muted-foreground">{fromResume ? "From résumé" : "Optional"}</span>
+        )}
+        {error ? (
+          <p id={`${id}-error`} className="mt-0.5 text-xs text-destructive">{error}</p>
+        ) : field.hint ? (
+          <p id={`${id}-hint`} className="mt-0.5 text-xs text-muted-foreground">{field.hint}</p>
+        ) : null}
+      </div>
       {control}
-      {field.hint && !error && <p id={`${id}-hint`} className="text-[11px] leading-relaxed text-muted-foreground">{field.hint}</p>}
-      {error && (
-        <p id={`${id}-error`} className="flex items-center gap-1 text-[11px] font-medium text-destructive">
-          <CircleAlert className="size-3" aria-hidden="true" />{error}
-        </p>
-      )}
     </div>
   );
 }
