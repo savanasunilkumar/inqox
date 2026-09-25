@@ -291,7 +291,10 @@ export function ProfileExperienceSection({
             if (editingIndex === index) {
               return <li key={index} className="py-2">{renderForm()}</li>;
             }
-            const duration = item.dateRange ? formatDuration(item.isCurrent ? `${item.dateRange.split(/\s*(?:-|–|—|\bto\b)\s*/i)[0]} - Present` : item.dateRange) : "";
+            const dateRange = item.isCurrent && item.dateRange
+              ? `${item.dateRange.split(/\s*(?:-|–|—|\bto\b)\s*/i)[0]} - Present`
+              : item.dateRange;
+            const duration = dateRange ? formatDuration(dateRange) : "";
             const highlights = item.highlights ?? [];
             const isExpanded = expanded.has(index);
             const visible = isExpanded ? highlights : highlights.slice(0, VISIBLE_HIGHLIGHTS);
@@ -323,7 +326,7 @@ export function ProfileExperienceSection({
                           {item.dateRange && (
                             <span className="inline-flex items-center gap-1 tabular-nums">
                               <Calendar aria-hidden="true" className="size-3" />
-                              {item.dateRange}
+                              {dateRange}
                               {duration && <span className="text-muted-foreground/70">· {duration}</span>}
                             </span>
                           )}
