@@ -349,6 +349,14 @@ const LOCATION_REGIONS =
   "alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming|" +
   "telangana|andhra pradesh|karnataka|maharashtra|tamil nadu|kerala|delhi|gujarat|west bengal|uttar pradesh|haryana|punjab|rajasthan|ontario|british columbia|quebec|alberta";
 const REGION_TAIL = new RegExp(`,\\s*(?:[A-Z]{2}(?:\\s+\\d{5})?|(?:${LOCATION_REGIONS}))\\.?$`, "i");
+const PURE_LOCATION = new RegExp(`^([A-Z][A-Za-z.' -]{1,30}),\\s*(?:[A-Z]{2}|${LOCATION_REGIONS})$`, "i");
+
+function isPureLocation(line: string): boolean {
+  const match = line.match(PURE_LOCATION);
+  if (!match) return false;
+  const words = match[1].trim().split(/\s+/);
+  return words.length === 1 || (words.length <= 3 && CITY_PREFIXES.has(words[0].toLowerCase()));
+}
 const WORKPLACE_TAIL = /(?:^|[\s,(|–—-]+)\(?(remote|hybrid|on-?site)\)?\.?$/i;
 // First words of common multi-word city names ("San Francisco", "New York", "Santa Clara").
 const CITY_PREFIXES = new Set(
@@ -385,9 +393,10 @@ function splitLocation(raw: string): { name: string; location: string } {
     }
     let cityWords = 1;
     const last2 = words[words.length - 2]?.toLowerCase();
+    const lastPair = words.slice(-2).join(" ").toLowerCase();
     const last3 = words[words.length - 3]?.toLowerCase();
     if (words.length >= 4 && last3 && CITY_PREFIXES.has(last3) && /^(?:lake|beach|park|valley)$/i.test(words[words.length - 2] ?? "")) cityWords = 3;
-    else if (words.length >= 3 && last2 && CITY_PREFIXES.has(last2)) cityWords = 2;
+    else if (words.length >= 3 && ((last2 && CITY_PREFIXES.has(last2)) || new RegExp(`^(?:${LOCATION_REGIONS})$`, "i").test(lastPair))) cityWords = 2;
     const nameWords = words.slice(0, words.length - cityWords);
     const cityText = words.slice(words.length - cityWords).join(" ");
     if (/^[A-Z]/.test(cityText) && nameWords.length > 0 && !COMPANY_SUFFIX_REGEX.test(cityText)) {
@@ -419,7 +428,7 @@ function separateLocations(
   const locations: string[] = [];
   const cleaned = lines.map((line, idx) => {
     locations[idx] = "";
-    if (/^[-•*·–—]/.test(line) || line.length > 110) return line;
+    if (/^[-•*·–—]/.test(line) || line.length > 110 || isPureLocation(line)) return line;
     const date = line.match(dateRegex);
     const withoutDate = date ? line.replace(date[0], " ").replace(/\s+/g, " ").trim() : line;
     const { name, location } = splitLocation(withoutDate);
@@ -444,7 +453,7 @@ function cleanCompanyName(raw: string): string {
   name = name.replace(/\s*[-–—|•·]\s*$/, "");
   // Strip a trailing ", City" tail (1-3 capitalized words that aren't a company suffix)
   const cityTail = name.match(/,\s*([A-Z][a-zA-Z.'-]+(?:\s+[A-Z][a-zA-Z.'-]+){0,2})$/);
-  if (cityTail && !COMPANY_SUFFIX_REGEX.test(cityTail[1])) {
+  if (cityTail && !COMPANY_SUFFIX_REGEX.test(cityTail[1]) && !/\b(?:university|college|institute|school|academy|lab|center|centre)\b/i.test(cityTail[1])) {
     name = name.slice(0, cityTail.index).trim();
   }
   return name.trim();
@@ -647,14 +656,14 @@ function extractExperience(
   // such as "Built payment APIs" is kept as a highlight instead.
   const isNameCased = (line: string) => {
     const words = line.split(/\s+/);
-    return words.length <= 6 && !/[.!?;:]$/.test(line) &&
+    return words.length <= 8 && !/[!?;:]$/.test(line) && !/[a-z]{3,}\.$/.test(line) &&
       words.every(w => /^[A-Z0-9&(]/.test(w) || /^(?:of|and|the|for|de|la|at|in|&)$/.test(w));
   };
 
   const looksLikeCompanyLine = (line: string, idx: number) =>
     !!line &&
     line.length > 1 &&
-    line.length < 60 &&
+    line.length < 80 &&
     !/^[-•*·–—]/.test(line) &&
     !dateRangeRegex.test(line) &&
     !/(19|20)\d{2}/.test(line) &&
@@ -807,6 +816,25 @@ function extractExperience(
         sourceLine: line,
       });
 
+      continue;
+    }
+
+    if (currentItem && currentItem.company === "Company" && currentItem.highlights.length === 0 && looksLikeCompanyLine(line, i)) {
+      currentItem.company = cleanCompanyName(line);
+      if (!currentItem.location && lineLocations[i]) currentItem.location = lineLocations[i];
+      logs.push({ category: "company", message: `Employer line found below the role: "${currentItem.company}"`, sourceLine: line });
+      continue;
+    }
+
+    if (currentItem && !currentItem.location && currentItem.highlights.length === 0 &&
+        isPureLocation(line)) {
+      currentItem.location = line;
+      continue;
+    }
+
+    // An employer heading directly above the next dated role is not a highlight of this one
+    const nextHasDate = [i + 1, i + 2].some(idx => idx < linesToScan.length && dateRangeRegex.test(linesToScan[idx]));
+    if (currentItem && nextHasDate && looksLikeCompanyLine(line, i) && !isTitleLine(line)) {
       continue;
     }
 

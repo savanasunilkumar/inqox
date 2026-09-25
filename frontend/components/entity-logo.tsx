@@ -4,10 +4,10 @@ import Image from "next/image";
 import { useState } from "react";
 import type { LogoEntityKind } from "@/lib/company-logos";
 
-type Props = { name: string; kind: LogoEntityKind };
+type Props = { name: string; kind: LogoEntityKind; location?: string };
 
-export function EntityLogo({ name, kind }: Props) {
-  const src = `/api/entity-logo?${new URLSearchParams({ kind, name })}`;
+export function EntityLogo({ name, kind, location }: Props) {
+  const src = `/api/entity-logo?${new URLSearchParams(location ? { kind, name, location } : { kind, name })}`;
   const [status, setStatus] = useState<{ src: string; state: "loaded" | "failed" } | null>(null);
   const state = status?.src === src ? status.state : "loading";
   const initials = name.trim().split(/\s+/).filter(w => /^[A-Za-z0-9]/.test(w)).slice(0, 2).map(w => w[0]).join("").toUpperCase();

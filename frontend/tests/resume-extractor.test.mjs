@@ -292,3 +292,25 @@ Independent Consultant | 2022 - Present
   assert.equal(result.experience[0].company, "Acme Corp");
   assert.notEqual(result.experience[1].company, "Acme Corp");
 });
+
+test("keeps research-lab employers, next-role headings, and multi-word regions out of highlights", () => {
+  const result = extractFromResumeText(`
+Experience
+Graduate Research Assistant Mar 2026 - Aug 2026
+PROSPER, Institute for Transportation, Iowa State University
+Ames, Iowa
+• Built traffic data pipelines in Python
+Thinix Ames, Iowa
+Software Development Intern May 2025 - Dec 2025
+• Built kiosk software
+Anora Instrumentation Pvt. Ltd. Tamil Nadu, India
+Software Engineer (Intern to L2) Apr 2022 - Aug 2024
+• Developed firmware tools
+`);
+  const roles = result.experience.map(e => [e.title, e.company, e.location, e.highlights]);
+  assert.deepEqual(roles, [
+    ["Graduate Research Assistant", "PROSPER, Institute for Transportation, Iowa State University", "Ames, Iowa", ["Built traffic data pipelines in Python"]],
+    ["Software Development Intern", "Thinix", "Ames, Iowa", ["Built kiosk software"]],
+    ["Software Engineer (Intern to L2)", "Anora Instrumentation Pvt. Ltd.", "Tamil Nadu, India", ["Developed firmware tools"]],
+  ]);
+});

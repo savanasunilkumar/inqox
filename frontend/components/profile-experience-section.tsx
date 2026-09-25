@@ -251,7 +251,7 @@ export function ProfileExperienceSection({
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
-                <EntityLogo name={item.company} kind="company" />
+                <EntityLogo name={item.company} kind="company" location={item.location} />
                 <div className="space-y-0.5">
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-sm font-semibold text-foreground">
