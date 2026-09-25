@@ -8,6 +8,8 @@ import { ProfileSummaryHeader } from "@/components/profile-summary-header";
 import { ProfileExperienceSection } from "@/components/profile-experience-section";
 import { ProfileEducationSection } from "@/components/profile-education-section";
 import { ProfileExtractionLogs } from "@/components/profile-extraction-logs";
+import { ProfileOnboarding } from "@/components/profile-onboarding";
+import { profileCompletion } from "@/lib/profile-completion";
 import type { ExtractedEducation, ExtractedExperience } from "@/lib/profile-model";
 import type { ExtractionLogEntry, ResumeExtractionResult } from "@/lib/resume-extractor";
 
@@ -25,6 +27,12 @@ export function LocalProfilePreview() {
   const [hasEducation, setHasEducation] = useState(false);
   const [hasExperience, setHasExperience] = useState(false);
   const [logs, setLogs] = useState<ExtractionLogEntry[]>([]);
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [prefilled, setPrefilled] = useState<Record<string, string>>({});
+  const completion = profileCompletion({
+    fields,
+    resume: file ? { key: "local", size: file.size, text: file.name } : null,
+  });
 
   const items = [
     { label: "Dashboard", icon: LayoutDashboard },
@@ -78,6 +86,12 @@ export function LocalProfilePreview() {
       setEducationList(extracted.education || []);
       setExperienceList(extracted.experience || []);
       setLogs(extracted.logs || []);
+      const values: Record<string, string> = {};
+      for (const [k, v] of Object.entries({ ...extracted.summary, ...extracted.contact })) {
+        if (v) values[k] = v;
+      }
+      setPrefilled(values);
+      setFields(prev => ({ ...values, ...Object.fromEntries(Object.entries(prev).filter(([, v]) => v)) }));
 
       setActiveTab("extracted");
     } finally {
@@ -113,14 +127,21 @@ export function LocalProfilePreview() {
       <aside aria-label="Preview navigation" className="hidden w-[11.5rem] shrink-0 flex-col justify-between px-2 pt-6 pb-4 md:flex">
         <div className="space-y-1">
           {items.map(({ label, icon: Icon }) => (
-            <button key={label} disabled className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-[13px] font-medium text-muted-foreground opacity-40">
+            <button key={label} disabled={!completion.complete} title={completion.complete ? undefined : "Complete your profile to unlock"} className={`flex h-8 w-full items-center gap-2 rounded-md px-2 text-[13px] font-medium text-muted-foreground ${completion.complete ? "hover:bg-sidebar-accent hover:text-foreground" : "cursor-not-allowed opacity-40"}`}>
               <Icon className="size-4" />
               <span>{label}</span>
-              <LockKeyhole className="ml-auto size-3" />
+              {!completion.complete && <LockKeyhole className="ml-auto size-3" />}
             </button>
           ))}
         </div>
         <div className="space-y-1">
+          {!completion.complete && (
+            <div className="mb-3 rounded-lg border border-primary/15 bg-primary/5 p-3">
+              <span className="text-xs font-medium">Complete your profile</span>
+              <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">{completion.missing.length} required {completion.missing.length === 1 ? "item" : "items"} left to unlock your workspace.</span>
+              <span className="mt-3 block h-1 overflow-hidden rounded-full bg-primary/10"><span className="block h-full rounded-full bg-primary transition-[width] duration-500" style={{ width: `${completion.completed / completion.total * 100}%` }} /></span>
+            </div>
+          )}
           <button disabled title="Available in the signed-in app" className="flex h-8 w-full items-center gap-2 px-2 text-[13px] text-muted-foreground">
             <Settings className="size-4" />Settings
           </button>
@@ -170,30 +191,34 @@ export function LocalProfilePreview() {
               />
 
               {activeTab === "extracted" ? (
-                <div className="mx-auto w-full max-w-3xl flex-1 space-y-8 p-6 sm:p-10">
-                  {/* Collapsible Extraction Logs */}
+                <div className="flex-1">
                   {showLogs && (
-                    <ProfileExtractionLogs
-                      logs={logs}
-                      institutions={detectedInstitutions}
-                      companies={detectedCompanies}
-                    />
+                    <div className="mx-auto w-full max-w-5xl px-4 pt-6 sm:px-8">
+                      <ProfileExtractionLogs logs={logs} institutions={detectedInstitutions} companies={detectedCompanies} />
+                    </div>
                   )}
-
-                  {/* Work Experience Section (NO box containers) */}
-                  <ProfileExperienceSection
-                    hasExperience={hasExperience}
-                    experienceList={experienceList}
-                    onExperienceListChange={setExperienceList}
-                    onFieldChange={() => {}}
-                  />
-
-                  {/* Education Section (NO box containers) */}
-                  <ProfileEducationSection
-                    hasEducation={hasEducation}
-                    educationList={educationList}
-                    onEducationListChange={setEducationList}
-                    onFieldChange={() => {}}
+                  <ProfileOnboarding
+                    key={file.name + file.size}
+                    fields={fields}
+                    onFieldChange={(key, value) => setFields(prev => ({ ...prev, [key]: value }))}
+                    prefilled={prefilled}
+                    completion={completion}
+                    onSave={async () => { await new Promise(resolve => setTimeout(resolve, 350)); }}
+                    finishHref="/profile"
+                    background={<>
+                      <ProfileExperienceSection
+                        hasExperience={hasExperience}
+                        experienceList={experienceList}
+                        onExperienceListChange={setExperienceList}
+                        onFieldChange={(key, value) => setFields(prev => ({ ...prev, [key]: value }))}
+                      />
+                      <ProfileEducationSection
+                        hasEducation={hasEducation}
+                        educationList={educationList}
+                        onEducationListChange={setEducationList}
+                        onFieldChange={(key, value) => setFields(prev => ({ ...prev, [key]: value }))}
+                      />
+                    </>}
                   />
                 </div>
               ) : (

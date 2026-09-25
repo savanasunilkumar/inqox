@@ -59,7 +59,7 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="px-2 py-4">
-        {!completion.complete && <Link href="/profile" className="mb-3 rounded-lg border border-primary/15 bg-primary/5 p-3"><span className="text-xs font-medium">Complete your profile</span><span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">Unlock your workspace.</span><span role="progressbar" aria-label="Profile completion" aria-valuenow={completion.completed} aria-valuemax={completion.total} aria-valuemin={0} className="mt-3 block h-1 overflow-hidden rounded-full bg-primary/10"><span className="block h-full rounded-full bg-primary" style={{ width: `${completion.completed / completion.total * 100}%` }} /></span></Link>}
+        {!completion.complete && <Link href="/profile" className="mb-3 rounded-lg border border-primary/15 bg-primary/5 p-3"><span className="text-xs font-medium">Complete your profile</span><span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">{completion.missing.length} required {completion.missing.length === 1 ? "item" : "items"} left to unlock your workspace.</span><span role="progressbar" aria-label="Profile completion" aria-valuenow={completion.completed} aria-valuemax={completion.total} aria-valuemin={0} className="mt-3 block h-1 overflow-hidden rounded-full bg-primary/10"><span className="block h-full rounded-full bg-primary transition-[width] duration-500" style={{ width: `${completion.completed / completion.total * 100}%` }} /></span></Link>}
         <nav aria-label="Account navigation"><NavigationItems items={account} /></nav>
         <div className="mt-3 flex min-w-0 items-center gap-2 border-t px-2 pt-3">
           <UserButton />
